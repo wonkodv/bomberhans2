@@ -2,7 +2,7 @@ use std::ops::Index;
 use std::ops::IndexMut;
 
 /// Player position is tracked in this many fractions of a cell
-const PLAYER_POSITION_ACCURACY: i32 = 100;
+const PLAYER_POSITION_ACCURACY: u32 = 100;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Time(u32);
@@ -19,35 +19,67 @@ impl std::ops::Add<Time> for Time {
 pub struct PlayerId(usize);
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-enum Direction {
+pub enum Direction {
     North,
     West,
     South,
     East,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct CellPosition {
+    x: u32,
+    y: u32,
+}
+
+impl CellPosition {
+    fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
+    }
+}
+
 /// Player positions
 #[derive(Debug, Copy, Clone, PartialEq)]
-struct Position {
-    x: i32,
-    y: i32,
+pub struct Position {
+    x: u32,
+    y: u32,
 }
 
 impl Position {
-    fn new(x: i32, y: i32) -> Self {
+    fn new(x: u32, y: u32) -> Self {
         Self { x, y }
     }
 
     /// move position `distance` into  `direction
-    fn add(&self, direction: Direction, distance: i32) -> Self {
+    fn add(&self, direction: Direction, distance: i32) -> Option<Self> {
         let Self { x, y } = *self;
+        let x = x as i32;
+        let y = y as i32;
         let (x, y) = match direction {
             Direction::North => (x, y - distance),
             Direction::West => (x - distance, y),
             Direction::South => (x, y + distance),
             Direction::East => (x + distance, y),
         };
-        Self { x, y }
+        if x > 0 && y > 0 {
+            Some(Self::new(x as u32, y as u32))
+        } else {
+            None
+        }
+    }
+
+    fn as_cell_pos(&self) -> CellPosition {
+        CellPosition {
+            x: self.x / PLAYER_POSITION_ACCURACY,
+            y: self.y / PLAYER_POSITION_ACCURACY,
+        }
+    }
+
+    fn from_cell_position(p: CellPosition) -> Self {
+        Self {
+            x: p.x * PLAYER_POSITION_ACCURACY + PLAYER_POSITION_ACCURACY / 2,
+            y: p.y * PLAYER_POSITION_ACCURACY + PLAYER_POSITION_ACCURACY / 2,
+        }
     }
 }
 
@@ -57,27 +89,17 @@ pub struct Ratios {
     power: u8,
     speed: u8,
     bombs: u8,
-    schinken: u8,
     teleport: u8,
     wood: u8,
     clear: u8,
 }
 
 impl Ratios {
-    pub fn new(
-        power: u8,
-        speed: u8,
-        bombs: u8,
-        schinken: u8,
-        teleport: u8,
-        wood: u8,
-        clear: u8,
-    ) -> Self {
+    pub fn new(power: u8, speed: u8, bombs: u8, teleport: u8, wood: u8, clear: u8) -> Self {
         Self {
             power,
             speed,
             bombs,
-            schinken,
             teleport,
             wood,
             clear,
@@ -85,13 +107,7 @@ impl Ratios {
     }
 
     fn generate(&self, random: u32) -> Cell {
-        let sum = self.power
-            + self.speed
-            + self.bombs
-            + self.schinken
-            + self.teleport
-            + self.wood
-            + self.clear;
+        let sum = self.power + self.speed + self.bombs + self.teleport + self.wood + self.clear;
 
         let mut random: u8 = (random % (sum as u32)).try_into().unwrap();
 
@@ -110,11 +126,6 @@ impl Ratios {
         }
         random -= self.bombs;
 
-        if random < self.schinken {
-            return Cell::Upgrade(Upgrade::Schinken);
-        }
-        random -= self.schinken;
-
         if random < self.teleport {
             return Cell::Teleport;
         }
@@ -126,7 +137,7 @@ impl Ratios {
         random -= self.wood;
 
         assert!(random < self.clear);
-        return Cell::Clear;
+        return Cell::Empty;
     }
 }
 
@@ -145,24 +156,24 @@ pub struct Rules {
     lag_time: Time,
 
     /// player walking speed at initial upgrade [cells/100/s]
-    speed_multiplyer: i32,
+    speed_multiplyer: u32,
 
     /// player walking speed upgrade start value
-    speed_offset: i32,
+    speed_offset: u32,
 
     /// percentage that walking on bomb succeeds each update
     bomb_walking_chance: u8,
 }
 
 impl Rules {
-    fn get_update_walk_distance(&self, player_speed: u8) -> i32 {
-        (i32::from(player_speed) + self.speed_offset) * self.speed_multiplyer
+    fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
+        (self.speed_offset + u32::from(player_speed)) * self.speed_multiplyer
     }
 }
 
-fn random(time: Time, r1: i32, r2: i32) -> u32 {
+fn random(time: Time, position: Position) -> u32 {
     let mut x: u32 = 42;
-    for i in [time.0 as i32, r1, r2] {
+    for i in [time.0, position.x, position.y] {
         for b in i.to_le_bytes() {
             x = x.overflowing_mul(31).0.overflowing_add(b as u32).0;
         }
@@ -175,7 +186,6 @@ pub enum Upgrade {
     Speed,
     Power,
     Bombs,
-    Schinken,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -186,11 +196,7 @@ pub enum Action {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct PlayerState {
-    since: Time,
-    action: Action,
-    direction: Direction,
-}
+struct PlayerState {}
 
 #[derive(Debug, Clone)]
 struct Player {
@@ -199,6 +205,9 @@ struct Player {
 
     /// Id of the player in the game
     id: PlayerId,
+
+    /// Re-/Spawn place
+    start_position: Position,
 
     /// current position
     position: Position,
@@ -218,64 +227,35 @@ struct Player {
     /// current bomb capacity upgrades
     bombs: u8,
 
-    /// current schinken?
-    schinken: u8,
-
     /// current placed bombs. Increased when placing, decreased when exploding.
     current_bombs_placed: u8,
 
-    /// Bombs placed since game start
-    total_bombs_placed: u32,
+    /// current action
+    action: Action,
 
-    /// distance walked since game start
-    distance_walked: u32,
-
-    // current State
-    state: PlayerState,
+    /// current direction
+    direction: Direction,
+    // TODO: track total walking distance, total bombs, ...
 }
 
 impl Player {
-    fn new(name: String, id: PlayerId) -> Self {
-        Self {
-            name,
-            id,
-            position: Position { x: 0, y: 0 },
-            deaths: 0,
-            kills: 0,
-            power: 1,
-            speed: 1,
-            bombs: 1,
-            schinken: 1,
-            current_bombs_placed: 0,
-            total_bombs_placed: 0,
-            distance_walked: 0,
-            state: PlayerState {
-                since: Time(0),
-                action: Action::Standing,
-                direction: Direction::South,
-            },
-        }
-    }
-
     fn eat(&mut self, upgrade: Upgrade) {
         let up = match upgrade {
             Upgrade::Speed => &mut self.speed,
             Upgrade::Power => &mut self.power,
             Upgrade::Bombs => &mut self.bombs,
-            Upgrade::Schinken => &mut self.schinken,
         };
         *up = up.saturating_add(1);
     }
 
-    fn die(&mut self, position: Position, _killed_by: PlayerId, time: Time) {
+    fn die(&mut self, _killed_by: PlayerId) {
         self.power = 1;
         self.speed = 1;
         self.bombs = 1;
-        self.position = position;
+        self.position = self.start_position;
         self.current_bombs_placed = 0;
-        self.state.since = time;
-        self.state.action = Action::Standing;
-        self.state.direction = Direction::South;
+        self.action = Action::Standing;
+        self.direction = Direction::South;
     }
 
     fn score(&mut self, _killed: PlayerId) {
@@ -286,17 +266,17 @@ impl Player {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum Cell {
     #[default]
-    Clear,
+    Empty,
     Bomb {
         owner: PlayerId,
+        power: u8,
         expire: Time,
     },
     Fire {
         owner: PlayerId,
         expire: Time,
     },
-    HansDead,
-    HansGore,
+    TombStone,
     Upgrade(Upgrade),
     Teleport,
     StartPoint,
@@ -305,28 +285,15 @@ pub enum Cell {
     WoodBurning(Time),
 }
 
-#[derive(Debug, Clone)]
-pub struct PlayerAction {
-    time: Time,
-    player: PlayerId,
-    action: Action,
-    direction: Direction,
-}
-
-#[derive(Debug)]
-pub enum GameError {
-    InvalidPlayerId(PlayerAction),
-}
-
 #[derive(Debug)]
 struct Field {
-    width: usize,
-    height: usize,
+    width: u32,
+    height: u32,
     cells: Vec<Cell>,
 }
 
 impl Field {
-    fn new(width: usize, height: usize) -> Self {
+    fn new(width: u32, height: u32) -> Self {
         let cells: Vec<Cell> = (0..width)
             .into_iter()
             .flat_map(|x| {
@@ -337,7 +304,7 @@ impl Field {
                     if x + y == 0 {
                         Cell::StartPoint
                     } else if x + y == 1 {
-                        Cell::Clear
+                        Cell::Empty
                     } else if (x % 2) == 1 && (y % 2) == 1 {
                         Cell::Wall
                     } else {
@@ -354,29 +321,13 @@ impl Field {
         }
     }
 
-    fn position_to_cell_index(&self, position: Position) -> Option<(usize, usize)> {
-        if position.x < 0 {
-            return None;
-        }
-        if position.y < 0 {
-            return None;
-        }
-        let x = position.x / PLAYER_POSITION_ACCURACY;
-        let y = position.y / PLAYER_POSITION_ACCURACY;
-        let (x, y) = (x as usize, y as usize);
-        if x >= self.width {
-            return None;
-        }
-        if y >= self.height {
-            return None;
-        }
-        Some((x, y))
-    }
-
-    fn cell_index_to_position(x: usize, y: usize) -> Position {
-        Position {
-            x: x as i32 * PLAYER_POSITION_ACCURACY + PLAYER_POSITION_ACCURACY / 2,
-            y: y as i32 * PLAYER_POSITION_ACCURACY + PLAYER_POSITION_ACCURACY / 2,
+    fn is_cell_in_field(&self, cell: CellPosition) -> bool {
+        if cell.x >= self.width {
+            false
+        } else if cell.y >= self.height {
+            false
+        } else {
+            true
         }
     }
 
@@ -384,17 +335,18 @@ impl Field {
         let mut s = String::new();
         for y in 0..self.height {
             for x in 0..self.width {
-                let chr = match self[(x, y)] {
-                    Cell::Clear => '_',
+                let cell = &self[CellPosition::new(x, y)];
+                // TODO: how about these: _💣💥🪦🏃💪🧨🚪🏳🧱🪜🔥
+
+                let chr = match cell {
+                    Cell::Empty => '_',
                     Cell::Bomb { .. } => 'B',
                     Cell::Fire { .. } => 'F',
-                    Cell::HansDead => 'D',
-                    Cell::HansGore => 'd',
+                    Cell::TombStone => 'D',
                     Cell::Upgrade(pu) => match pu {
-                        Upgrade::Speed => 'S',
-                        Upgrade::Power => 'P',
+                        Upgrade::Speed => 's',
+                        Upgrade::Power => 'p',
                         Upgrade::Bombs => 'b',
-                        Upgrade::Schinken => 'h',
                     },
                     Cell::Teleport => 'T',
                     Cell::StartPoint => 'O',
@@ -410,61 +362,58 @@ impl Field {
     }
 
     fn iter<'f>(&'f self) -> FieldIterator<'f> {
-        FieldIterator {
-            field: self,
-            x: 0,
-            y: 0,
-        }
+        FieldIterator::new(self)
     }
 }
 
-impl Index<(usize, usize)> for Field {
+impl Index<CellPosition> for Field {
     type Output = Cell;
 
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (x, y) = index;
-        if x > self.width {
-            panic!("x > width: {} > {}", x, self.width);
+    fn index(&self, index: CellPosition) -> &Self::Output {
+        if self.is_cell_in_field(index) {
+            &self.cells[(index.y * self.width + index.x) as usize]
+        } else {
+            panic!("y > height: {} > {}", index.y, self.height)
         }
-        if y > self.height {
-            panic!("y > height: {} > {}", y, self.height);
-        }
-        &self.cells[y * self.width + x]
     }
 }
 
-impl IndexMut<(usize, usize)> for Field {
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (x, y) = index;
-        if x > self.width {
-            panic!("x > width: {} > {}", x, self.width);
+impl IndexMut<CellPosition> for Field {
+    fn index_mut(&mut self, index: CellPosition) -> &mut Self::Output {
+        if self.is_cell_in_field(index) {
+            &mut self.cells[(index.y * self.width + index.x) as usize]
+        } else {
+            panic!("y > height: {} > {}", index.y, self.height)
         }
-        if y > self.height {
-            panic!("y > height: {} > {}", y, self.height);
-        }
-        &mut self.cells[y * self.width + x]
     }
 }
 
 struct FieldIterator<'f> {
     field: &'f Field,
-    x: usize,
-    y: usize,
+    pos: CellPosition,
+}
+impl<'f> FieldIterator<'f> {
+    fn new(field: &'f Field) -> Self {
+        Self {
+            field,
+            pos: CellPosition::new(0, 0),
+        }
+    }
 }
 
 impl<'f> Iterator for FieldIterator<'f> {
-    type Item = ((usize, usize), &'f Cell);
+    type Item = (CellPosition, &'f Cell);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.x += 1;
-        if self.x >= self.field.width {
-            self.x = 0;
-            self.y += 1;
+        self.pos.x += 1;
+        if self.pos.x >= self.field.width {
+            self.pos.x = 0;
+            self.pos.y += 1;
         }
-        if self.y >= self.field.height {
+        if self.pos.y >= self.field.height {
             None
         } else {
-            Some(((self.x, self.y), &self.field[(self.x, self.y)]))
+            Some((self.pos, &self.field[self.pos]))
         }
     }
 }
@@ -480,159 +429,235 @@ pub struct Game {
 
 pub struct Update {
     time: Time,
-    player: PlayerId,
     events: Vec<Event>,
 }
-enum Event {
-    Move { position: Position },
-    Eat { upgrade: Upgrade },
-    Killed { bomb_owner: PlayerId },
-    Place { position: Position },
-    Teleport { x: usize, y: usize },
+
+pub enum Event {
+    Move(PlayerId, Position),
+    Eat(PlayerId, Upgrade, CellPosition),
+    Killed {
+        dead: PlayerId,
+        owner: PlayerId,
+        at: CellPosition,
+    },
+    Place {
+        player_id: PlayerId,
+        cell: CellPosition,
+        expire: Time,
+        power: u8,
+    },
+    Teleport {
+        player_id: PlayerId,
+        from: CellPosition,
+        to: CellPosition,
+    },
+    StateChange {
+        player_id: PlayerId,
+        action: Action,
+        direction: Direction,
+    },
 }
 
 impl Game {
-    fn update_player(&mut self, player_id: PlayerId) {
-        let player = &mut self.players[player_id.0];
+    /// advance a player 1 tick and generate the events from that
+    fn player_update_event(&self, player_id: PlayerId) -> Vec<Event> {
+        let mut events: Vec<Event> = Vec::new();
+        let player = &self.players[player_id.0];
 
-        match player.state.action {
+        match player.action {
             Action::Standing | Action::Placing => { /*nothing to do */ }
             Action::Walking => {
-                let new_pos = player.position.add(
-                    player.state.direction,
-                    self.rules.get_update_walk_distance(player.speed),
+                let position = player.position.add(
+                    player.direction,
+                    self.rules.get_update_walk_distance(player.speed) as i32,
                 );
-
-                let player_cell_index = match self.field.position_to_cell_index(new_pos) {
-                    None => return,
-                    Some(xy) => xy,
-                };
-
-                let cell = &self.field[player_cell_index];
-                match cell {
-                    Cell::StartPoint | Cell::HansGore | Cell::Clear => {
-                        player.position = new_pos;
-                    }
-                    Cell::Bomb { .. } | Cell::HansDead => {
-                        if random(self.time, new_pos.x, new_pos.y) % 100
-                            < self.rules.bomb_walking_chance.into()
-                        {
-                            player.position = new_pos;
+                if let Some(position) = position {
+                    let cell_position = position.as_cell_pos();
+                    if self.field.is_cell_in_field(cell_position) {
+                        let cell = &self.field[cell_position];
+                        match cell {
+                            Cell::StartPoint | Cell::Empty => {
+                                events.push(Event::Move(player_id, position));
+                            }
+                            Cell::Bomb { .. } | Cell::TombStone => {
+                                if random(self.time, position) % 100
+                                    < self.rules.bomb_walking_chance.into()
+                                {
+                                    // GAME_RULE: walking on bombs randomly happens or doesn't, decided
+                                    // each update.
+                                    events.push(Event::Move(player_id, position));
+                                }
+                            }
+                            Cell::Fire { owner, .. } => {
+                                events.push(Event::Killed {
+                                    dead: player_id,
+                                    owner: *owner,
+                                    at: cell_position,
+                                });
+                            }
+                            Cell::Upgrade(upgrade) => {
+                                events.push(Event::Move(player_id, position));
+                                events.push(Event::Eat(player_id, *upgrade, cell_position));
+                            }
+                            Cell::Teleport => {
+                                let targets: Vec<(CellPosition, &Cell)> = self
+                                    .field
+                                    .iter()
+                                    .filter(|(pos, cell)| {
+                                        **cell == Cell::Teleport && *pos != cell_position
+                                    })
+                                    .collect();
+                                if targets.len() > 1 {
+                                    let target = targets
+                                        [random(self.time, position) as usize % targets.len()];
+                                    let (to, target_cell): (_, &Cell) = target;
+                                    assert_eq!(*target_cell, Cell::Teleport);
+                                    events.push(Event::Teleport {
+                                        player_id,
+                                        from: cell_position,
+                                        to,
+                                    });
+                                } else {
+                                    events.push(Event::Move(player_id, position));
+                                }
+                            }
+                            Cell::Wall | Cell::Wood | Cell::WoodBurning(_) => {} /* no walking through walls */
                         }
                     }
-                    Cell::Fire { owner, .. } => {
-                        let start_point = self
-                            .field
-                            .iter()
-                            .filter(|(_, cell)| **cell == Cell::StartPoint)
-                            .nth(player.id.0)
-                            .expect("Player's StartPoint still exists");
-                        let ((x, y), _cell) = start_point;
-                        player.die(Field::cell_index_to_position(x, y), *owner, self.time);
-                        let id = player.id;
-                        self.players[owner.0].score(id)
-                    }
-                    Cell::Upgrade(upgrade) => {
-                        player.position = new_pos;
-                        player.eat(*upgrade);
-                    }
-                    Cell::Teleport => {
-                        let targets: Vec<((usize, usize), &Cell)> = self
-                            .field
-                            .iter()
-                            .filter(|(xy, cell)| **cell == Cell::Clear && *xy != player_cell_index)
-                            .collect();
-                        if targets.len() > 1 {
-                            let target = targets
-                                [random(self.time, new_pos.x, new_pos.y) as usize % targets.len()];
-                            let ((x, y), _cell): (_, &Cell) = target;
-                            player.position = Field::cell_index_to_position(x, y)
-                        } else {
-                            player.position = new_pos;
-                        }
-                    }
-                    Cell::Wall | Cell::Wood | Cell::WoodBurning(_) => {} /* no walking through walls */
                 }
             }
         };
+        events
+    }
+
+    fn apply_event(&mut self, events: &[Event]) {
+        for event in events {
+            match event {
+                Event::Move(player, position) => {
+                    self.players[player.0].position = *position;
+                }
+                Event::Eat(player, upgrade, position) => {
+                    self.players[player.0].eat(*upgrade);
+                    self.field[*position] = Cell::Empty;
+                }
+                Event::Killed { dead, owner, at } => {
+                    self.players[dead.0].die(*owner);
+                    self.field[*at] = Cell::TombStone;
+                    self.players[owner.0].score(*dead);
+                }
+                Event::Place {
+                    player_id,
+                    cell,
+                    expire,
+                    power,
+                } => {
+                    let player = &mut self.players[player_id.0];
+                    let cell = &mut self.field[*cell];
+
+                    assert!(player.current_bombs_placed < player.bombs);
+                    player.current_bombs_placed += 1;
+
+                    assert!(*cell == Cell::Empty);
+                    *cell = Cell::Bomb {
+                        owner: *player_id,
+                        expire: *expire,
+                        power: *power,
+                    };
+                }
+                Event::Teleport {
+                    player_id,
+                    from,
+                    to,
+                } => {
+                    let player = &mut self.players[player_id.0];
+                    player.position = Position::from_cell_position(*to);
+
+                    assert_eq!(self.field[*from], Cell::Teleport);
+                    assert_eq!(self.field[*to], Cell::Teleport);
+
+                    self.field[*from] = Cell::Empty;
+                    self.field[*to] = Cell::Empty;
+                }
+                Event::StateChange {
+                    player_id,
+                    action,
+                    direction,
+                } => {
+                    let player = &mut self.players[player_id.0];
+                    player.action = *action;
+                    player.direction = *direction;
+                }
+            }
+        }
     }
 
     pub fn update(&mut self) {
         self.time.0 += 1;
         for i in 0..self.players.len() {
-            self.update_player(PlayerId(i));
+            self.player_update_event(PlayerId(i));
         }
     }
 
-    pub fn player_action(&mut self, player_action: PlayerAction) -> Result<bool, GameError> {
-        let player = self
-            .players
-            .get_mut(player_action.player.0)
-            .ok_or_else(|| GameError::InvalidPlayerId(player_action.clone()))?;
+    pub fn player_action(
+        &self,
+        player_id: PlayerId,
+        action: Action,
+        direction: Direction,
+    ) -> Vec<Event> {
+        let mut events = Vec::new();
+        let player = &self.players[player_id.0];
 
-        // TODO: backtrack
-        if player.state.action != player_action.action
-            || player.state.direction != player_action.direction
-        {
-            player.state = PlayerState {
-                since: player_action.time,
-                action: player_action.action,
-                direction: player_action.direction,
-            };
-            match player_action.action {
-                Action::Standing => Ok(true),
-                Action::Walking => Ok(true),
+        if player.action != action || player.direction != direction {
+            match action {
+                Action::Standing | Action::Walking => events.push(Event::StateChange {
+                    player_id,
+                    action,
+                    direction,
+                }),
                 Action::Placing => {
-                    // TODO Self::player_place_bomb(player, &mut self.field, &self.)
-                    if player.current_bombs_placed >= player.bombs {
-                        // GAME RULE: can not place more bombs than you have bomb powerups
-                        return Ok(false);
-                    }
-
-                    let cell = self.field.position_to_cell_index(
-                        player
-                            .position
-                            .add(player.state.direction, -self.rules.bomb_offset),
-                    );
-                    let cell = match cell {
-                        Some(cell) => cell,
-                        None => {
-                            // GAME_RULE: placing a Bomb outside of the field is NoOp
-                            return Ok(false);
-                        }
-                    };
-                    let cell = &mut self.field[cell];
-
-                    // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
-                    // if you have enough bombs to place
-                    if let Cell::Upgrade(upgrage) = cell {
-                        player.eat(*upgrage);
-                        *cell = Cell::Clear;
-                    }
-                    // TODO: placing Bombs into TP and have the Bomb Port would be funny
-                    // TODO: place Bomb into fire for immediate explosion?
-                    // GAME_RULE: Bombs can only be placed on empty Cells (after eating any powerups
-                    // there were)
-                    if Cell::Clear != *cell {
-                        // GAME_RULE: placing a Bomb on Cells not PowerUp or Clear is NoOp.
-                        Ok(false)
+                    // GAME RULE: can not place more bombs than you have bomb powerups
+                    if player.current_bombs_placed != player.bombs {
+                        // log out of bombs
                     } else {
-                        player.total_bombs_placed += 1;
-                        player.current_bombs_placed += 1;
-                        // GAME_RULE: bomb is owned by the one who placed it
-                        // GAME_RULE: bom has fixed timeout (TODO: add randomness?)
-                        *cell = Cell::Bomb {
-                            owner: player.id,
-                            expire: player_action.time + self.rules.bomb_time,
-                        };
+                        let position = player
+                            .position
+                            .add(player.direction, -self.rules.bomb_offset);
 
-                        Ok(true)
+                        if let Some(position) = position {
+                            let cell_position = position.as_cell_pos();
+                            if self.field.is_cell_in_field(cell_position) {
+                                let cell = &self.field[cell_position];
+
+                                // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
+                                // if you have enough bombs to place
+                                if let Cell::Upgrade(upgrade) = cell {
+                                    events.push(Event::Eat(player_id, *upgrade, cell_position));
+                                }
+
+                                // TODO: placing Bombs into TP and have the Bomb Port would be funny
+                                // TODO: place Bomb into fire for immediate explosion?
+                                // GAME_RULE: Bombs can only be placed on empty Cells (after eating any powerups
+                                // there were)
+                                if Cell::Empty == *cell {
+                                    events.push(Event::Place {
+                                        player_id,
+                                        cell: cell_position,
+                                        expire: self.time + self.rules.bomb_time,
+                                        power: player.power,
+                                    });
+                                }
+                            } else {
+                                // TODO: log not placing bomb from here
+                            }
+                        } else {
+                            // TODO: log not placing bomb from here
+                        }
                     }
                 }
             }
-        } else {
-            Ok(false)
         }
+
+        events
     }
 }
 
@@ -644,30 +669,53 @@ mod test {
     fn test_player_coord_add() {
         let p = Position { x: 100, y: 100 };
 
-        assert_eq!(p.add(Direction::North, 10), Position { x: 100, y: 90 });
-        assert_eq!(p.add(Direction::South, 10), Position { x: 100, y: 110 });
-        assert_eq!(p.add(Direction::West, 10), Position { x: 90, y: 100 });
-        assert_eq!(p.add(Direction::East, 10), Position { x: 110, y: 100 });
+        assert_eq!(p.add(Direction::North, 101), None);
+
+        assert_eq!(
+            p.add(Direction::North, 10),
+            Some(Position { x: 100, y: 90 })
+        );
+        assert_eq!(
+            p.add(Direction::South, 10),
+            Some(Position { x: 100, y: 110 })
+        );
+        assert_eq!(p.add(Direction::West, 10), Some(Position { x: 90, y: 100 }));
+        assert_eq!(
+            p.add(Direction::East, 10),
+            Some(Position { x: 110, y: 100 })
+        );
     }
 
     #[test]
     fn test_player_coord_sub() {
         let p = Position { x: 100, y: 100 };
 
-        assert_eq!(p.add(Direction::North, -10), Position { x: 100, y: 110 });
-        assert_eq!(p.add(Direction::South, -10), Position { x: 100, y: 90 });
-        assert_eq!(p.add(Direction::West, -10), Position { x: 110, y: 100 });
-        assert_eq!(p.add(Direction::East, -10), Position { x: 90, y: 100 });
+        assert_eq!(
+            p.add(Direction::North, -10),
+            Some(Position { x: 100, y: 110 })
+        );
+        assert_eq!(
+            p.add(Direction::South, -10),
+            Some(Position { x: 100, y: 90 })
+        );
+        assert_eq!(
+            p.add(Direction::West, -10),
+            Some(Position { x: 110, y: 100 })
+        );
+        assert_eq!(
+            p.add(Direction::East, -10),
+            Some(Position { x: 90, y: 100 })
+        );
     }
 
     #[test]
     fn test_random() {
-        let r = random(Time(0), 0, 0);
-        assert_eq!(r, random(Time(0), 0, 0));
-        assert!(r != random(Time(1), 0, 0));
-        assert!(r != random(Time(0), 1, 0));
-        assert!(r != random(Time(0), 0, 1));
-        assert!(r != random(Time(2), 0, 0));
+        let r = random(Time(0), Position::new(0, 0));
+        assert_eq!(r, random(Time(0), Position::new(0, 0)));
+        assert!(r != random(Time(1), Position::new(0, 0)));
+        assert!(r != random(Time(0), Position::new(1, 0)));
+        assert!(r != random(Time(0), Position::new(0, 1)));
+        assert!(r != random(Time(2), Position::new(0, 0)));
     }
 
     //   fn game() -> Game {
@@ -689,7 +737,7 @@ mod test {
 
     #[test]
     fn test_ratios() {
-        let r = Ratios::new(2, 2, 2, 2, 2, 2, 2);
+        let r = Ratios::new(2, 2, 2, 2, 2, 2);
 
         assert_eq!(Cell::Upgrade(Upgrade::Power), r.generate(000));
         assert_eq!(Cell::Upgrade(Upgrade::Power), r.generate(001));
@@ -697,52 +745,42 @@ mod test {
         assert_eq!(Cell::Upgrade(Upgrade::Speed), r.generate(003));
         assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.generate(004));
         assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.generate(005));
-        assert_eq!(Cell::Upgrade(Upgrade::Schinken), r.generate(006));
-        assert_eq!(Cell::Upgrade(Upgrade::Schinken), r.generate(007));
-        assert_eq!(Cell::Teleport, r.generate(008));
-        assert_eq!(Cell::Teleport, r.generate(009));
-        assert_eq!(Cell::Wood, r.generate(010));
-        assert_eq!(Cell::Wood, r.generate(011));
-        assert_eq!(Cell::Clear, r.generate(012));
-        assert_eq!(Cell::Clear, r.generate(013));
+        assert_eq!(Cell::Teleport, r.generate(006));
+        assert_eq!(Cell::Teleport, r.generate(007));
+        assert_eq!(Cell::Wood, r.generate(008));
+        assert_eq!(Cell::Wood, r.generate(009));
+        assert_eq!(Cell::Empty, r.generate(010));
+        assert_eq!(Cell::Empty, r.generate(011));
     }
 
     #[test]
-    fn test_field_index_to_player_pos() {
-        assert_eq!(Field::cell_index_to_position(5, 9), Position::new(550, 950));
+    fn test_cell_to_pos() {
+        assert_eq!(
+            Position::from_cell_position(CellPosition::new(5, 9)),
+            Position::new(550, 950)
+        );
+    }
+    #[test]
+    fn test_pos_to_cell() {
+        assert_eq!(
+            Position::new(500, 999).as_cell_pos(),
+            CellPosition::new(5, 9)
+        );
     }
 
     #[test]
-    fn test_player_pos_to_field_index() {
-        let field = Field::new(11, 17);
-        assert_eq!(
-            field.position_to_cell_index(Position::new(599, 900)),
-            Some((5, 9))
-        );
-        assert_eq!(
-            field.position_to_cell_index(Position::new(0, 0)),
-            Some((0, 0))
-        );
-        assert_eq!(
-            field.position_to_cell_index(Position::new(1099, 1699)),
-            Some((10, 16))
-        );
-        assert_eq!(
-            field.position_to_cell_index(Position::new(1100, 1699)),
-            None
-        );
-        assert_eq!(
-            field.position_to_cell_index(Position::new(1099, 1700)),
-            None
-        );
-        assert_eq!(field.position_to_cell_index(Position::new(0, -1)), None);
-        assert_eq!(field.position_to_cell_index(Position::new(-1, 0)), None);
+    fn test_pos_in_field() {
+        let field = Field::new(11, 11);
+        assert!(field.is_cell_in_field(CellPosition::new(10, 10)));
+        assert!(!field.is_cell_in_field(CellPosition::new(10, 11)));
+        assert!(!field.is_cell_in_field(CellPosition::new(11, 10)));
     }
 
     #[test]
     fn test_field_gen() {
         let field = Field::new(11, 11);
 
+        println!("{}", field.string_grid());
         assert_eq!(
             field.string_grid(),
             "O_+++++++_O
