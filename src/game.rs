@@ -15,6 +15,14 @@ impl std::ops::Add<Time> for Time {
     }
 }
 
+impl std::ops::Add<i32> for Time {
+    type Output = Time;
+
+    fn add(self, rhs: i32) -> Self::Output {
+        Time((self.0 as i32 + rhs) as u32)
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct PlayerId(usize);
 
@@ -35,6 +43,16 @@ pub struct CellPosition {
 impl CellPosition {
     fn new(x: u32, y: u32) -> Self {
         Self { x, y }
+    }
+
+    fn same_row_distance(&self, other: &Self) -> Option<u32> {
+        if self.x == other.x {
+            Some(self.y.abs_diff(other.y))
+        } else if self.y == other.y {
+            Some(self.y.abs_diff(other.y))
+        } else {
+            None
+        }
     }
 }
 
@@ -163,6 +181,15 @@ pub struct Rules {
 
     /// percentage that walking on bomb succeeds each update
     bomb_walking_chance: u8,
+
+    /// Power of Upgrade Paackets exploding
+    upgrade_explosion_power: u8,
+
+    /// how long before burning wood turns into something
+    wood_burn_time: Time,
+
+    /// how long fire burns
+    fire_burn_time: Time,
 }
 
 impl Rules {
@@ -171,9 +198,9 @@ impl Rules {
     }
 }
 
-fn random(time: Time, position: Position) -> u32 {
+fn random(time: Time, r1: u32, r2: u32) -> u32 {
     let mut x: u32 = 42;
-    for i in [time.0, position.x, position.y] {
+    for i in [time.0, r1, r2] {
         for b in i.to_le_bytes() {
             x = x.overflowing_mul(31).0.overflowing_add(b as u32).0;
         }
@@ -364,6 +391,10 @@ impl Field {
     fn iter<'f>(&'f self) -> FieldIterator<'f> {
         FieldIterator::new(self)
     }
+
+    fn iter_mut<'f>(&'f mut self) -> FieldMutIterator<'f> {
+        FieldMutIterator::new(self)
+    }
 }
 
 impl Index<CellPosition> for Field {
@@ -400,7 +431,6 @@ impl<'f> FieldIterator<'f> {
         }
     }
 }
-
 impl<'f> Iterator for FieldIterator<'f> {
     type Item = (CellPosition, &'f Cell);
 
@@ -418,13 +448,34 @@ impl<'f> Iterator for FieldIterator<'f> {
     }
 }
 
-#[derive(Debug)]
-pub struct Game {
-    name: String,
-    players: Vec<Player>,
-    time: Time,
-    field: Field,
-    rules: Rules,
+struct FieldMutIterator<'f> {
+    field: &'f mut Field,
+    pos: CellPosition,
+}
+impl<'f> FieldMutIterator<'f> {
+    fn new(field: &'f mut Field) -> Self {
+        Self {
+            field,
+            pos: CellPosition::new(0, 0),
+        }
+    }
+}
+
+impl<'f> Iterator for FieldMutIterator<'f> {
+    type Item = (CellPosition, &'f mut Cell);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pos.x += 1;
+        if self.pos.x >= self.field.width {
+            self.pos.x = 0;
+            self.pos.y += 1;
+        }
+        if self.pos.y >= self.field.height {
+            None
+        } else {
+            Some((self.pos, &mut self.field[self.pos]))
+        }
+    }
 }
 
 pub struct Update {
@@ -456,8 +507,17 @@ pub enum Event {
         action: Action,
         direction: Direction,
     },
+    CellUpdate(CellPosition, Cell),
 }
 
+#[derive(Debug)]
+pub struct Game {
+    name: String,
+    players: Vec<Player>,
+    time: Time,
+    field: Field,
+    rules: Rules,
+}
 impl Game {
     /// advance a player 1 tick and generate the events from that
     fn player_update_event(&self, player_id: PlayerId) -> Vec<Event> {
@@ -480,7 +540,7 @@ impl Game {
                                 events.push(Event::Move(player_id, position));
                             }
                             Cell::Bomb { .. } | Cell::TombStone => {
-                                if random(self.time, position) % 100
+                                if random(self.time, position.x, position.y) % 100
                                     < self.rules.bomb_walking_chance.into()
                                 {
                                     // GAME_RULE: walking on bombs randomly happens or doesn't, decided
@@ -508,8 +568,9 @@ impl Game {
                                     })
                                     .collect();
                                 if targets.len() > 1 {
-                                    let target = targets
-                                        [random(self.time, position) as usize % targets.len()];
+                                    let target = targets[random(self.time, position.x, position.y)
+                                        as usize
+                                        % targets.len()];
                                     let (to, target_cell): (_, &Cell) = target;
                                     assert_eq!(*target_cell, Cell::Teleport);
                                     events.push(Event::Teleport {
@@ -587,6 +648,103 @@ impl Game {
                     player.action = *action;
                     player.direction = *direction;
                 }
+                Event::CellUpdate(pos, cell) => {
+                    self.field[*pos] = *cell;
+                }
+            }
+        }
+    }
+
+    /// set a cell on fire.
+    ///
+    /// consider_tp if target is a teleport, explode a random other teleport too.
+    ///
+    /// returns if the should continue further
+    fn set_on_fire(&mut self, cell: CellPosition, owner: PlayerId, consider_tp: bool) -> bool {
+        let (burns, power) = match &self.field[cell] {
+            Cell::Fire { .. } | Cell::Empty | Cell::TombStone => (true, 0),
+            Cell::Bomb { power, .. } => (true, *power),
+            Cell::Upgrade(_) => (true, self.rules.upgrade_explosion_power),
+            Cell::Teleport => {
+                if consider_tp {
+                    let ports: Vec<CellPosition> = self
+                        .field
+                        .iter()
+                        .filter_map(|(i_pos, i_cell)| {
+                            if *i_cell == Cell::Teleport && i_pos != cell {
+                                Some(i_pos)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    if !ports.is_empty() {
+                        let other = ports[random(self.time, cell.x, cell.y) as usize % ports.len()];
+                        self.set_on_fire(other, owner, false);
+                    }
+                }
+                (true, self.rules.upgrade_explosion_power)
+            }
+            Cell::StartPoint | Cell::WoodBurning(_) | Cell::Wall => (false, 0),
+            Cell::Wood => {
+                self.field[cell] = Cell::WoodBurning(self.rules.wood_burn_time);
+                (false, 0)
+            }
+        };
+        if burns {
+            self.field[cell] = Cell::Fire {
+                owner,
+                expire: self.rules.fire_burn_time,
+            };
+            if power > 0 {
+                for i in 1..=(power as u32) {
+                    self.set_on_fire(CellPosition::new(cell.x + i, cell.y), owner, true) || break;
+                }
+                for i in 1..=(power as u32) {
+                    self.set_on_fire(CellPosition::new(cell.x - i, cell.y), owner, true) || break;
+                }
+                for i in 1..=(power as u32) {
+                    self.set_on_fire(CellPosition::new(cell.x, cell.y + i), owner, true) || break;
+                }
+                for i in 1..=(power as u32) {
+                    self.set_on_fire(CellPosition::new(cell.x, cell.y - i), owner, true) || break;
+                }
+            }
+        }
+        burns
+    }
+
+    fn field_update_events(&mut self) {
+        for (cell_idx, cell) in self.field.iter_mut() {
+            match cell {
+                Cell::Bomb {
+                    owner,
+                    power,
+                    expire,
+                } => {
+                    expire.0 -= 1;
+                    if expire.0 == 0 {
+                        self.set_on_fire(CellPosition::new(cell_idx.x, cell_idx.y), *owner, true);
+                    }
+                }
+                Cell::Fire { owner, expire } => {
+                    expire.0 -= 1;
+                    if expire.0 == 0 {
+                        *cell = Cell::Empty;
+                    }
+                }
+                Cell::WoodBurning(_) => {
+                    let r = random(self.time, cell_idx.x, cell_idx.y);
+                    *cell = self.rules.ratios.generate(r);
+                }
+
+                Cell::TombStone
+                | Cell::Upgrade(_)
+                | Cell::Teleport
+                | Cell::StartPoint
+                | Cell::Empty
+                | Cell::Wall
+                | Cell::Wood => {}
             }
         }
     }
