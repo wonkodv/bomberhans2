@@ -1,8 +1,13 @@
+use std::collections::HashSet;
+use std::error::Error;
+use std::fmt;
 use std::ops::Index;
 use std::ops::IndexMut;
 
 /// Player position is tracked in this many fractions of a cell
 const PLAYER_POSITION_ACCURACY: u32 = 100;
+
+type HResult<T> = Result<T, String>;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Time(u32);
@@ -19,7 +24,11 @@ impl std::ops::Add<i32> for Time {
     type Output = Time;
 
     fn add(self, rhs: i32) -> Self::Output {
-        Time((self.0 as i32 + rhs) as u32)
+        Time(
+            self.0
+                .checked_add_signed(rhs)
+                .expect("time doesn't overflow"),
+        )
     }
 }
 
@@ -45,7 +54,8 @@ impl CellPosition {
         Self { x, y }
     }
 
-    fn same_row_distance(&self, other: &Self) -> Option<u32> {
+    /// Distance if in line of fire
+    fn fire_distance(&self, other: &Self) -> Option<u32> {
         if self.x == other.x {
             Some(self.y.abs_diff(other.y))
         } else if self.y == other.y {
@@ -71,19 +81,13 @@ impl Position {
     /// move position `distance` into  `direction
     fn add(&self, direction: Direction, distance: i32) -> Option<Self> {
         let Self { x, y } = *self;
-        let x = x as i32;
-        let y = y as i32;
         let (x, y) = match direction {
-            Direction::North => (x, y - distance),
-            Direction::West => (x - distance, y),
-            Direction::South => (x, y + distance),
-            Direction::East => (x + distance, y),
+            Direction::North => (x, y.checked_add_signed(-distance)?),
+            Direction::West => (x.checked_add_signed(-distance)?, y),
+            Direction::South => (x, y.checked_add_signed(distance)?),
+            Direction::East => (x.checked_add_signed(distance)?, y),
         };
-        if x > 0 && y > 0 {
-            Some(Self::new(x as u32, y as u32))
-        } else {
-            None
-        }
+        Some(Self::new(x, y))
     }
 
     fn as_cell_pos(&self) -> CellPosition {
@@ -124,10 +128,12 @@ impl Ratios {
         }
     }
 
-    fn generate(&self, random: u32) -> Cell {
-        let sum = self.power + self.speed + self.bombs + self.teleport + self.wood + self.clear;
+    fn generate(&self, random: usize) -> Cell {
+        let sum: u8 = self.power + self.speed + self.bombs + self.teleport + self.wood + self.clear;
 
-        let mut random: u8 = (random % (sum as u32)).try_into().unwrap();
+        let mut random: u8 = (random % (usize::from(sum)))
+            .try_into()
+            .expect("random % sum fits");
 
         if random < self.power {
             return Cell::Upgrade(Upgrade::Power);
@@ -198,11 +204,11 @@ impl Rules {
     }
 }
 
-fn random(time: Time, r1: u32, r2: u32) -> u32 {
-    let mut x: u32 = 42;
+fn random(time: Time, r1: u32, r2: u32) -> usize {
+    let mut x: usize = 42;
     for i in [time.0, r1, r2] {
         for b in i.to_le_bytes() {
-            x = x.overflowing_mul(31).0.overflowing_add(b as u32).0;
+            x = x.overflowing_mul(31).0.overflowing_add(b.into()).0;
         }
     }
     x
@@ -392,8 +398,13 @@ impl Field {
         FieldIterator::new(self)
     }
 
-    fn iter_mut<'f>(&'f mut self) -> FieldMutIterator<'f> {
-        FieldMutIterator::new(self)
+    fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
+        let height = self.height;
+        return (0..self.width).into_iter().flat_map(move |x| {
+            (0..height)
+                .into_iter()
+                .map(move |y| CellPosition::new(x, y))
+        });
     }
 }
 
@@ -402,7 +413,7 @@ impl Index<CellPosition> for Field {
 
     fn index(&self, index: CellPosition) -> &Self::Output {
         if self.is_cell_in_field(index) {
-            &self.cells[(index.y * self.width + index.x) as usize]
+            &self.cells[usize::try_from(index.y * self.width + index.x).expect("index fits usize")]
         } else {
             panic!("y > height: {} > {}", index.y, self.height)
         }
@@ -412,7 +423,8 @@ impl Index<CellPosition> for Field {
 impl IndexMut<CellPosition> for Field {
     fn index_mut(&mut self, index: CellPosition) -> &mut Self::Output {
         if self.is_cell_in_field(index) {
-            &mut self.cells[(index.y * self.width + index.x) as usize]
+            &mut self.cells
+                [usize::try_from(index.y * self.width + index.x).expect("index fits usize")]
         } else {
             panic!("y > height: {} > {}", index.y, self.height)
         }
@@ -457,23 +469,6 @@ impl<'f> FieldMutIterator<'f> {
         Self {
             field,
             pos: CellPosition::new(0, 0),
-        }
-    }
-}
-
-impl<'f> Iterator for FieldMutIterator<'f> {
-    type Item = (CellPosition, &'f mut Cell);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.pos.x += 1;
-        if self.pos.x >= self.field.width {
-            self.pos.x = 0;
-            self.pos.y += 1;
-        }
-        if self.pos.y >= self.field.height {
-            None
-        } else {
-            Some((self.pos, &mut self.field[self.pos]))
         }
     }
 }
@@ -529,7 +524,10 @@ impl Game {
             Action::Walking => {
                 let position = player.position.add(
                     player.direction,
-                    self.rules.get_update_walk_distance(player.speed) as i32,
+                    self.rules
+                        .get_update_walk_distance(player.speed)
+                        .try_into()
+                        .expect("walked distance fits i32"),
                 );
                 if let Some(position) = position {
                     let cell_position = position.as_cell_pos();
@@ -568,9 +566,8 @@ impl Game {
                                     })
                                     .collect();
                                 if targets.len() > 1 {
-                                    let target = targets[random(self.time, position.x, position.y)
-                                        as usize
-                                        % targets.len()];
+                                    let target = targets
+                                        [random(self.time, position.x, position.y) % targets.len()];
                                     let (to, target_cell): (_, &Cell) = target;
                                     assert_eq!(*target_cell, Cell::Teleport);
                                     events.push(Event::Teleport {
@@ -649,7 +646,7 @@ impl Game {
                     player.direction = *direction;
                 }
                 Event::CellUpdate(pos, cell) => {
-                    self.field[*pos] = *cell;
+                    self.field[*pos] = cell.clone();
                 }
             }
         }
@@ -679,7 +676,7 @@ impl Game {
                         })
                         .collect();
                     if !ports.is_empty() {
-                        let other = ports[random(self.time, cell.x, cell.y) as usize % ports.len()];
+                        let other = ports[random(self.time, cell.x, cell.y) % ports.len()];
                         self.set_on_fire(other, owner, false);
                     }
                 }
@@ -692,22 +689,31 @@ impl Game {
             }
         };
         if burns {
+            let power: u32 = power.into();
             self.field[cell] = Cell::Fire {
                 owner,
                 expire: self.rules.fire_burn_time,
             };
             if power > 0 {
-                for i in 1..=(power as u32) {
-                    self.set_on_fire(CellPosition::new(cell.x + i, cell.y), owner, true) || break;
+                for i in 1..=power {
+                    if !self.set_on_fire(CellPosition::new(cell.x + i, cell.y), owner, true) {
+                        break;
+                    };
                 }
-                for i in 1..=(power as u32) {
-                    self.set_on_fire(CellPosition::new(cell.x - i, cell.y), owner, true) || break;
+                for i in 1..=power {
+                    if !self.set_on_fire(CellPosition::new(cell.x - i, cell.y), owner, true) {
+                        break;
+                    }
                 }
-                for i in 1..=(power as u32) {
-                    self.set_on_fire(CellPosition::new(cell.x, cell.y + i), owner, true) || break;
+                for i in 1..=power {
+                    if !self.set_on_fire(CellPosition::new(cell.x, cell.y + i), owner, true) {
+                        break;
+                    }
                 }
-                for i in 1..=(power as u32) {
-                    self.set_on_fire(CellPosition::new(cell.x, cell.y - i), owner, true) || break;
+                for i in 1..=power {
+                    if !self.set_on_fire(CellPosition::new(cell.x, cell.y - i), owner, true) {
+                        break;
+                    }
                 }
             }
         }
@@ -715,7 +721,10 @@ impl Game {
     }
 
     fn field_update_events(&mut self) {
-        for (cell_idx, cell) in self.field.iter_mut() {
+        let fields_on_fire: HashSet<CellPosition> = HashSet::new();
+
+        for cell_idx in self.field.iter_indices() {
+            let cell = &mut self.field[cell_idx];
             match cell {
                 Cell::Bomb {
                     owner,
@@ -724,7 +733,8 @@ impl Game {
                 } => {
                     expire.0 -= 1;
                     if expire.0 == 0 {
-                        self.set_on_fire(CellPosition::new(cell_idx.x, cell_idx.y), *owner, true);
+                        let owner = *owner;
+                        self.set_on_fire(CellPosition::new(cell_idx.x, cell_idx.y), owner, true);
                     }
                 }
                 Cell::Fire { owner, expire } => {
@@ -868,12 +878,12 @@ mod test {
 
     #[test]
     fn test_random() {
-        let r = random(Time(0), Position::new(0, 0));
-        assert_eq!(r, random(Time(0), Position::new(0, 0)));
-        assert!(r != random(Time(1), Position::new(0, 0)));
-        assert!(r != random(Time(0), Position::new(1, 0)));
-        assert!(r != random(Time(0), Position::new(0, 1)));
-        assert!(r != random(Time(2), Position::new(0, 0)));
+        let r = random(Time(0), 0, 0);
+        assert_eq!(r, random(Time(0), 0, 0));
+        assert!(r != random(Time(1), 0, 0));
+        assert!(r != random(Time(0), 1, 0));
+        assert!(r != random(Time(0), 0, 1));
+        assert!(r != random(Time(2), 0, 0));
     }
 
     //   fn game() -> Game {
