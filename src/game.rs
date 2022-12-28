@@ -318,6 +318,53 @@ pub enum Cell {
     WoodBurning(Time),
 }
 
+impl Cell {
+    fn to_char(&self) -> char {
+        // TODO: how about these: _ 💣 💥 🪦 🏃 💪 🧨 🚪 🏳 🧱 🪜 🔥
+        match self {
+            Cell::Empty => '_',
+            Cell::Bomb { .. } => 'B',
+            Cell::Fire { .. } => 'F',
+            Cell::TombStone => 'D',
+            Cell::Upgrade(pu) => match pu {
+                Upgrade::Speed => 's',
+                Upgrade::Power => 'p',
+                Upgrade::Bombs => 'b',
+            },
+            Cell::Teleport => 'T',
+            Cell::StartPoint => 'O',
+            Cell::Wall => '#',
+            Cell::Wood => '+',
+            Cell::WoodBurning(_) => 'W',
+        }
+    }
+    fn from_char(chr: char) -> HResult<Self> {
+        let owner = PlayerId(0);
+        let power = 1;
+        let expire = Time(1);
+        let cell = match chr {
+            '_' => Cell::Empty,
+            'B' => Cell::Bomb {
+                owner,
+                power,
+                expire,
+            },
+            'F' => Cell::Fire { owner, expire },
+            'D' => Cell::TombStone,
+            's' => Cell::Upgrade(Upgrade::Speed),
+            'p' => Cell::Upgrade(Upgrade::Power),
+            'b' => Cell::Upgrade(Upgrade::Bombs),
+            'T' => Cell::Teleport,
+            'O' => Cell::StartPoint,
+            '#' => Cell::Wall,
+            '+' => Cell::Wood,
+            'W' => Cell::WoodBurning(expire),
+            chr => return Err(format!("Invalid character {}", chr)),
+        };
+        Ok(cell)
+    }
+}
+
 #[derive(Debug)]
 struct Field {
     width: u32,
@@ -369,29 +416,47 @@ impl Field {
         for y in 0..self.height {
             for x in 0..self.width {
                 let cell = &self[CellPosition::new(x, y)];
-                // TODO: how about these: _💣💥🪦🏃💪🧨🚪🏳🧱🪜🔥
-
-                let chr = match cell {
-                    Cell::Empty => '_',
-                    Cell::Bomb { .. } => 'B',
-                    Cell::Fire { .. } => 'F',
-                    Cell::TombStone => 'D',
-                    Cell::Upgrade(pu) => match pu {
-                        Upgrade::Speed => 's',
-                        Upgrade::Power => 'p',
-                        Upgrade::Bombs => 'b',
-                    },
-                    Cell::Teleport => 'T',
-                    Cell::StartPoint => 'O',
-                    Cell::Wall => '#',
-                    Cell::Wood => '+',
-                    Cell::WoodBurning(_) => '+',
-                };
-                s.push(chr);
+                s.push(cell.to_char());
             }
             s.push('\n');
         }
         s
+    }
+
+    fn from_string_grid(string: &str) -> HResult<Self> {
+        let lines: Vec<&str> = string
+            .split('\n')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if lines.is_empty() {
+            return Err("0 rows".to_owned());
+        }
+        let height = lines.len();
+        let width = lines[0].len();
+
+        for (i, row) in lines.iter().enumerate() {
+            if row.len() != width {
+                return Err(format!("line {i} has wrong length"));
+            }
+        }
+
+        let cells: Vec<Cell> = lines
+            .iter()
+            .enumerate()
+            .flat_map(|(y, row)| {
+                row.chars().enumerate().map(move |(x, chr)| {
+                    Cell::from_char(chr)
+                        .map_err(|e| format!("Character for Cell {x}/{y} invalid: {chr}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self {
+            width: width.try_into().map_err(|err:std::num::TryFromIntError| err.to_string())?,
+            height: height.try_into().map_err(|err:std::num::TryFromIntError| err.to_string())?,
+            cells,
+        })
     }
 
     fn iter<'f>(&'f self) -> FieldIterator<'f> {
@@ -965,5 +1030,23 @@ mod test {
             "
             .replace(" ", "")
         );
+    }
+
+    #[test]
+    fn test_field_from_string() {
+        let s = "O_+++++++_O
+             _#+#+#+#+#_
+             spb++++++++
+             +#+#+#+#+#+
+             ++++B+B++++
+             +#+#+#+#+#+
+             ++++B++++++
+             +#+#W#+#+#+
+             ++++F++++++
+             _#+#F#+#+#_
+             O_++F+T++_O
+            "
+        .replace(" ", "");
+        assert_eq!(Field::from_string_grid(&s).unwrap().string_grid(), s);
     }
 }
