@@ -374,10 +374,10 @@ struct Field {
 
 impl Field {
     fn new(width: u32, height: u32) -> Self {
-        let cells: Vec<Cell> = (0..width)
+        let cells: Vec<Cell> = (0..height)
             .into_iter()
-            .flat_map(|x| {
-                (0..height).into_iter().map(move |y| {
+            .flat_map(|y| {
+                (0..width).into_iter().map(move |x| {
                     let x = if x >= width / 2 { width - x - 1 } else { x };
                     let y = if y >= height / 2 { height - y - 1 } else { y };
 
@@ -1011,13 +1011,15 @@ mod test {
 
     #[test]
     fn test_field_gen() {
-        let field = Field::new(11, 11);
+        let field = Field::new(11, 13);
 
         println!("{}", field.string_grid());
         assert_eq!(
             field.string_grid(),
             "O_+++++++_O
              _#+#+#+#+#_
+             +++++++++++
+             +#+#+#+#+#+
              +++++++++++
              +#+#+#+#+#+
              +++++++++++
