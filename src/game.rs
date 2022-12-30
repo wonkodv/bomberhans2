@@ -3,14 +3,23 @@ use std::error::Error;
 use std::fmt;
 use std::ops::Index;
 use std::ops::IndexMut;
+use std::rc::Rc;
 
 /// Player position is tracked in this many fractions of a cell
 const PLAYER_POSITION_ACCURACY: u32 = 100;
+
+const TICKS_PER_SECOND: u32 = 60;
 
 type HResult<T> = Result<T, String>;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Time(u32);
+
+impl Time {
+    fn from_seconds(seconds: u32) -> Self {
+        Self(seconds * TICKS_PER_SECOND)
+    }
+}
 
 impl std::ops::Add<Time> for Time {
     type Output = Time;
@@ -106,7 +115,7 @@ impl Position {
 }
 
 /// Ratios of Wood turning into those cell types:
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ratios {
     power: u8,
     speed: u8,
@@ -114,6 +123,12 @@ pub struct Ratios {
     teleport: u8,
     wood: u8,
     clear: u8,
+}
+
+impl Default for Ratios {
+    fn default() -> Self {
+        Self::new(8, 9, 7, 1, 1, 20)
+    }
 }
 
 impl Ratios {
@@ -165,37 +180,61 @@ impl Ratios {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Rules {
+    // field width
+    pub width: u32,
+
+    // field width
+    pub height: u32,
+
+    pub players: u32,
+
     /// Ratios what comes out of burned down walls
-    ratios: Ratios,
+    pub ratios: Ratios,
 
     /// how far behind the player the bomb is placed [cell/100]
-    bomb_offset: i32,
+    pub bomb_offset: i32,
 
     /// time after bomb placement that the bomb explodes
-    bomb_time: Time,
-
-    /// Time after which a player is lagging and does not move forward
-    lag_time: Time,
+    pub bomb_time: Time,
 
     /// player walking speed at initial upgrade [cells/100/s]
-    speed_multiplyer: u32,
+    pub speed_multiplyer: u32,
 
     /// player walking speed upgrade start value
-    speed_offset: u32,
+    pub speed_offset: u32,
 
     /// percentage that walking on bomb succeeds each update
-    bomb_walking_chance: u8,
+    pub bomb_walking_chance: u8,
 
     /// Power of Upgrade Paackets exploding
-    upgrade_explosion_power: u8,
+    pub upgrade_explosion_power: u8,
 
     /// how long before burning wood turns into something
-    wood_burn_time: Time,
+    pub wood_burn_time: Time,
 
     /// how long fire burns
-    fire_burn_time: Time,
+    pub fire_burn_time: Time,
+}
+
+impl Default for Rules {
+    fn default() -> Self {
+        Rules {
+            width: 17,
+            height: 13,
+            players: 4,
+            ratios: Ratios::default(),
+            bomb_offset: 30,
+            bomb_time: Time::from_seconds(3),
+            speed_multiplyer: 10,
+            speed_offset: 42,
+            bomb_walking_chance: 70,
+            upgrade_explosion_power: 1,
+            wood_burn_time: Time::from_seconds(3),
+            fire_burn_time: Time::from_seconds(3),
+        }
+    }
 }
 
 impl Rules {
@@ -228,11 +267,8 @@ pub enum Action {
     Walking,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct PlayerState {}
-
 #[derive(Debug, Clone)]
-struct Player {
+pub struct Player {
     /// Name the player chose
     name: String,
 
@@ -241,7 +277,10 @@ struct Player {
 
     /// Re-/Spawn place
     start_position: Position,
+}
 
+#[derive(Debug, Clone, PartialEq)]
+struct PlayerState {
     /// current position
     position: Position,
 
@@ -271,7 +310,21 @@ struct Player {
     // TODO: track total walking distance, total bombs, ...
 }
 
-impl Player {
+impl PlayerState {
+    fn new(position: Position) -> Self {
+        Self {
+            position,
+            deaths: 0,
+            kills: 0,
+            power: 1,
+            speed: 1,
+            bombs: 0,
+            current_bombs_placed: 0,
+            action: Action::Standing,
+            direction: Direction::South,
+        }
+    }
+
     fn eat(&mut self, upgrade: Upgrade) {
         let up = match upgrade {
             Upgrade::Speed => &mut self.speed,
@@ -281,11 +334,11 @@ impl Player {
         *up = up.saturating_add(1);
     }
 
-    fn die(&mut self, _killed_by: PlayerId) {
+    fn die(&mut self, _killed_by: PlayerId, start_position: Position) {
         self.power = 1;
         self.speed = 1;
         self.bombs = 1;
-        self.position = self.start_position;
+        self.position = start_position;
         self.current_bombs_placed = 0;
         self.action = Action::Standing;
         self.direction = Direction::South;
@@ -374,6 +427,8 @@ struct Field {
 
 impl Field {
     fn new(width: u32, height: u32) -> Self {
+        assert!(width % 2 == 1);
+        assert!(height % 2 == 1);
         let cells: Vec<Cell> = (0..height)
             .into_iter()
             .flat_map(|y| {
@@ -381,7 +436,7 @@ impl Field {
                     let x = if x >= width / 2 { width - x - 1 } else { x };
                     let y = if y >= height / 2 { height - y - 1 } else { y };
 
-                    if x + y == 0 {
+                    if x == 0 && y == 0 {
                         Cell::StartPoint
                     } else if x + y == 1 {
                         Cell::Empty
@@ -453,14 +508,18 @@ impl Field {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            width: width.try_into().map_err(|err:std::num::TryFromIntError| err.to_string())?,
-            height: height.try_into().map_err(|err:std::num::TryFromIntError| err.to_string())?,
+            width: width
+                .try_into()
+                .map_err(|err: std::num::TryFromIntError| err.to_string())?,
+            height: height
+                .try_into()
+                .map_err(|err: std::num::TryFromIntError| err.to_string())?,
             cells,
         })
     }
 
-    fn iter<'f>(&'f self) -> FieldIterator<'f> {
-        FieldIterator::new(self)
+    fn iter(&self) -> impl Iterator<Item = (CellPosition, &Cell)> {
+        return self.iter_indices().map(move |pos| (pos, &self[pos]));
     }
 
     fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
@@ -470,6 +529,18 @@ impl Field {
                 .into_iter()
                 .map(move |y| CellPosition::new(x, y))
         });
+    }
+
+    fn start_positions(&self) -> Vec<CellPosition> {
+        self.iter()
+            .filter_map(|(pos, cell)| {
+                if *cell == Cell::StartPoint {
+                    Some(pos)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -492,35 +563,6 @@ impl IndexMut<CellPosition> for Field {
                 [usize::try_from(index.y * self.width + index.x).expect("index fits usize")]
         } else {
             panic!("y > height: {} > {}", index.y, self.height)
-        }
-    }
-}
-
-struct FieldIterator<'f> {
-    field: &'f Field,
-    pos: CellPosition,
-}
-impl<'f> FieldIterator<'f> {
-    fn new(field: &'f Field) -> Self {
-        Self {
-            field,
-            pos: CellPosition::new(0, 0),
-        }
-    }
-}
-impl<'f> Iterator for FieldIterator<'f> {
-    type Item = (CellPosition, &'f Cell);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.pos.x += 1;
-        if self.pos.x >= self.field.width {
-            self.pos.x = 0;
-            self.pos.y += 1;
-        }
-        if self.pos.y >= self.field.height {
-            None
-        } else {
-            Some((self.pos, &self.field[self.pos]))
         }
     }
 }
@@ -571,26 +613,105 @@ pub enum Event {
 }
 
 #[derive(Debug)]
+pub struct GameStatic {
+    pub name: String,
+    pub players: Vec<Player>,
+    pub rules: Rules,
+}
+
 pub struct Game {
-    name: String,
-    players: Vec<Player>,
+    pub game_static: Rc<GameStatic>,
+    pub game_state: GameState,
+    pub local_player: PlayerId,
+}
+
+impl Game {
+    pub fn new_local_game(name: String, rules: Rules) -> Self {
+        let field = Field::new(rules.width, rules.height);
+        let start_positions = field.start_positions();
+
+        assert!(start_positions.len() <= rules.players as _);
+
+        let local_player = PlayerId(1);
+
+        let players: Vec<Player> = (0..(rules.players as usize))
+            .into_iter()
+            .map(|id| Player {
+                name: {
+                    if id == local_player.0 as _ {
+                        format!("Player {}", id)
+                    } else {
+                        "Local Player".into()
+                    }
+                },
+                id: PlayerId(id as _),
+                start_position: Position::from_cell_position(start_positions[id]),
+            })
+            .collect();
+
+        let player_states = players
+            .iter()
+            .map(|p| PlayerState::new(p.start_position))
+            .collect();
+
+        let game_static = GameStatic {
+            name,
+            players,
+            rules,
+        };
+        let game_static = Rc::new(game_static);
+
+        let game_state = GameState {
+            time: Time(0),
+            field,
+            player_states,
+            game_static: Rc::clone(&game_static),
+        };
+        Self {
+            game_static,
+            game_state,
+            local_player,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct GameState {
     time: Time,
     field: Field,
-    rules: Rules,
+    player_states: Vec<PlayerState>,
+    game_static: Rc<GameStatic>,
 }
-impl Game {
+
+impl GameState {
+    fn new(
+        time: Time,
+        field: Field,
+        player_states: Vec<PlayerState>,
+        game: Rc<GameStatic>,
+    ) -> Self {
+        Self {
+            time,
+            field,
+            player_states,
+            game_static: game,
+        }
+    }
+
     /// advance a player 1 tick and generate the events from that
     fn player_update_event(&self, player_id: PlayerId) -> Vec<Event> {
         let mut events: Vec<Event> = Vec::new();
-        let player = &self.players[player_id.0];
+        let player = &self.game_static.players[player_id.0];
+        let player_state = &self.player_states[player_id.0];
 
-        match player.action {
+        match player_state.action {
             Action::Standing | Action::Placing => { /*nothing to do */ }
             Action::Walking => {
-                let position = player.position.add(
-                    player.direction,
-                    self.rules
-                        .get_update_walk_distance(player.speed)
+                let position = player_state.position.add(
+                    player_state.direction,
+                    self.game_static
+                        .rules
+                        .get_update_walk_distance(player_state.speed)
                         .try_into()
                         .expect("walked distance fits i32"),
                 );
@@ -604,7 +725,7 @@ impl Game {
                             }
                             Cell::Bomb { .. } | Cell::TombStone => {
                                 if random(self.time, position.x, position.y) % 100
-                                    < self.rules.bomb_walking_chance.into()
+                                    < self.game_static.rules.bomb_walking_chance.into()
                                 {
                                     // GAME_RULE: walking on bombs randomly happens or doesn't, decided
                                     // each update.
@@ -657,16 +778,17 @@ impl Game {
         for event in events {
             match event {
                 Event::Move(player, position) => {
-                    self.players[player.0].position = *position;
+                    self.player_states[player.0].position = *position;
                 }
                 Event::Eat(player, upgrade, position) => {
-                    self.players[player.0].eat(*upgrade);
+                    self.player_states[player.0].eat(*upgrade);
                     self.field[*position] = Cell::Empty;
                 }
                 Event::Killed { dead, owner, at } => {
-                    self.players[dead.0].die(*owner);
+                    self.player_states[dead.0]
+                        .die(*owner, self.game_static.players[dead.0].start_position);
                     self.field[*at] = Cell::TombStone;
-                    self.players[owner.0].score(*dead);
+                    self.player_states[owner.0].score(*dead);
                 }
                 Event::Place {
                     player_id,
@@ -674,7 +796,7 @@ impl Game {
                     expire,
                     power,
                 } => {
-                    let player = &mut self.players[player_id.0];
+                    let player = &mut self.player_states[player_id.0];
                     let cell = &mut self.field[*cell];
 
                     assert!(player.current_bombs_placed < player.bombs);
@@ -692,8 +814,8 @@ impl Game {
                     from,
                     to,
                 } => {
-                    let player = &mut self.players[player_id.0];
-                    player.position = Position::from_cell_position(*to);
+                    let player_state = &mut self.player_states[player_id.0];
+                    player_state.position = Position::from_cell_position(*to);
 
                     assert_eq!(self.field[*from], Cell::Teleport);
                     assert_eq!(self.field[*to], Cell::Teleport);
@@ -706,9 +828,9 @@ impl Game {
                     action,
                     direction,
                 } => {
-                    let player = &mut self.players[player_id.0];
-                    player.action = *action;
-                    player.direction = *direction;
+                    let player_state = &mut self.player_states[player_id.0];
+                    player_state.action = *action;
+                    player_state.direction = *direction;
                 }
                 Event::CellUpdate(pos, cell) => {
                     self.field[*pos] = cell.clone();
@@ -726,7 +848,7 @@ impl Game {
         let (burns, power) = match &self.field[cell] {
             Cell::Fire { .. } | Cell::Empty | Cell::TombStone => (true, 0),
             Cell::Bomb { power, .. } => (true, *power),
-            Cell::Upgrade(_) => (true, self.rules.upgrade_explosion_power),
+            Cell::Upgrade(_) => (true, self.game_static.rules.upgrade_explosion_power),
             Cell::Teleport => {
                 if consider_tp {
                     let ports: Vec<CellPosition> = self
@@ -745,11 +867,11 @@ impl Game {
                         self.set_on_fire(other, owner, false);
                     }
                 }
-                (true, self.rules.upgrade_explosion_power)
+                (true, self.game_static.rules.upgrade_explosion_power)
             }
             Cell::StartPoint | Cell::WoodBurning(_) | Cell::Wall => (false, 0),
             Cell::Wood => {
-                self.field[cell] = Cell::WoodBurning(self.rules.wood_burn_time);
+                self.field[cell] = Cell::WoodBurning(self.game_static.rules.wood_burn_time);
                 (false, 0)
             }
         };
@@ -757,7 +879,7 @@ impl Game {
             let power: u32 = power.into();
             self.field[cell] = Cell::Fire {
                 owner,
-                expire: self.rules.fire_burn_time,
+                expire: self.game_static.rules.fire_burn_time,
             };
             if power > 0 {
                 for i in 1..=power {
@@ -810,7 +932,7 @@ impl Game {
                 }
                 Cell::WoodBurning(_) => {
                     let r = random(self.time, cell_idx.x, cell_idx.y);
-                    *cell = self.rules.ratios.generate(r);
+                    *cell = self.game_static.rules.ratios.generate(r);
                 }
 
                 Cell::TombStone
@@ -826,7 +948,7 @@ impl Game {
 
     pub fn update(&mut self) {
         self.time.0 += 1;
-        for i in 0..self.players.len() {
+        for i in 0..self.player_states.len() {
             self.player_update_event(PlayerId(i));
         }
     }
@@ -838,7 +960,7 @@ impl Game {
         direction: Direction,
     ) -> Vec<Event> {
         let mut events = Vec::new();
-        let player = &self.players[player_id.0];
+        let player = &self.player_states[player_id.0];
 
         if player.action != action || player.direction != direction {
             match action {
@@ -854,7 +976,7 @@ impl Game {
                     } else {
                         let position = player
                             .position
-                            .add(player.direction, -self.rules.bomb_offset);
+                            .add(player.direction, -self.game_static.rules.bomb_offset);
 
                         if let Some(position) = position {
                             let cell_position = position.as_cell_pos();
@@ -875,7 +997,7 @@ impl Game {
                                     events.push(Event::Place {
                                         player_id,
                                         cell: cell_position,
-                                        expire: self.time + self.rules.bomb_time,
+                                        expire: self.time + self.game_static.rules.bomb_time,
                                         power: player.power,
                                     });
                                 }
@@ -1050,5 +1172,20 @@ mod test {
             "
         .replace(" ", "");
         assert_eq!(Field::from_string_grid(&s).unwrap().string_grid(), s);
+    }
+
+    #[test]
+    fn test_generated_with_start_points() {
+        let field = Field::new(17, 13);
+        println!("{}", field.string_grid());
+        assert_eq!(
+            field.start_positions(),
+            vec![
+                CellPosition { x: 0, y: 0 },
+                CellPosition { x: 16, y: 0 },
+                CellPosition { x: 0, y: 12 },
+                CellPosition { x: 16, y: 12 }
+            ]
+        );
     }
 }
