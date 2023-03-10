@@ -1,13 +1,32 @@
-use eframe::egui;
+use std::collections::HashMap;
+use std::rc::Rc;
 
+use eframe::egui;
+use egui::pos2;
+use egui::Color32;
+use egui::Rect;
+use egui::TextureHandle;
+use egui::TextureId;
+
+use crate::game::Cell;
+use crate::game::CellPosition;
 use crate::game::Game;
 use crate::game::GameState;
 use crate::game::Rules;
+
+const PIXEL_PER_CELL: f32 = 16.0;
 
 enum Step {
     Initial,
     Game(Game),
     GameOver(String),
+}
+
+fn cell_rect(pos: CellPosition) -> egui::Rect {
+    let x = pos.x as f32 * PIXEL_PER_CELL;
+    let y = pos.y as f32 * PIXEL_PER_CELL;
+
+    Rect::from_min_max(pos2(x, y), pos2(x + PIXEL_PER_CELL, y + PIXEL_PER_CELL))
 }
 
 pub fn gui() {
@@ -24,11 +43,28 @@ pub fn gui() {
                 rules: Rules::default(),
                 game_name: "A Game of Bomberhans".into(),
                 player_name: "New Player".into(),
-
-                background_texture: None,
+                textures: None,
             })
         }),
     )
+}
+
+struct TextureManager {
+    textures: HashMap<&'static str, TextureHandle>,
+}
+
+impl TextureManager {
+    fn get_texture(self: &Rc<Self>, texture: &str) -> TextureId {
+        self.textures
+            .get(texture)
+            .ok_or_else(|| format!("Expected {texture} to exist"))
+            .unwrap()
+            .into()
+    }
+
+    fn get_cell(self: &Rc<Self>, cell: &Cell) -> TextureId {
+        self.get_texture(&format!("cell_{}", cell.name()))
+    }
 }
 
 struct MyApp {
@@ -37,10 +73,18 @@ struct MyApp {
     game_name: String,
     player_name: String,
 
-    background_texture: Option<egui::TextureHandle>,
+    textures: Option<Rc<TextureManager>>,
 }
 
 impl MyApp {
+    fn textures(&mut self, ctx: &egui::Context) -> Rc<TextureManager> {
+        Rc::clone(self.textures.get_or_insert_with(|| {
+            Rc::new(TextureManager {
+                textures: load_tiles(ctx),
+            })
+        }))
+    }
+
     fn update_initial(&mut self, ui: &mut egui::Ui) {
         if let Step::GameOver(s) = &self.step {
             ui.label(s);
@@ -63,22 +107,14 @@ impl MyApp {
     }
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
+        let textures = self.textures(ui.ctx());
         let Step::Game(game) = &self.step else {unreachable!();};
 
-        let width = game.game_static.rules.width * 16;
-        let height = game.game_static.rules.height * 16;
-        let texture: &mut egui::TextureHandle = self.background_texture.get_or_insert_with(|| {
-            ui.ctx().load_texture(
-                "game_field_background",
-                egui::ColorImage::new([width as usize, height as usize], egui::Color32::GRAY),
-                egui::TextureOptions::default(),
-            )
-        });
-        let width = width as f32;
-        let height = height as f32;
+        let width = game.game_static.rules.width as f32 * PIXEL_PER_CELL;
+        let height = game.game_static.rules.height as f32 * PIXEL_PER_CELL;
 
         let game_field = ui.image(
-            texture,
+            textures.get_texture("background"),
             egui::Vec2 {
                 x: width,
                 y: height,
@@ -88,7 +124,7 @@ impl MyApp {
         let painter = ui.painter_at(game_field.rect);
 
         let rect = egui::Rect::from_min_size(
-            egui::Pos2 ::ZERO,
+            egui::Pos2::ZERO,
             egui::Vec2 {
                 x: width,
                 y: height,
@@ -103,6 +139,15 @@ impl MyApp {
                 color: egui::Color32::GOLD,
             },
         );
+
+        game.game_state.field.iter().for_each(|(pos, cell)| {
+            painter.image(
+                textures.get_cell(cell).into(),
+                cell_rect(pos),
+                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
+        });
     }
 }
 
@@ -118,18 +163,49 @@ impl eframe::App for MyApp {
     }
 }
 
-// fn load_image_from_memory(image_data: &[u8]) -> egui::ColorImage {
-//     let image = image::load_from_memory(image_data).expect("resources can be loaded");
-//     let size = [image.width() as _, image.height() as _];
-//     let image_buffer = image.to_rgba8();
-//     let pixels = image_buffer.as_flat_samples();
-//     egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
-// }
-//
-// fn load_tiles(ctx: &egui::Context) {
-//     ctx.load_texture(
-//         "cell_bomb",
-//         load_image_from_memory(include_bytes!("../images/cell_bomb.bmp")),
-//         egui::TextureOptions::default(),
-//     );
-// }
+fn load_image_from_memory(image_data: &[u8]) -> egui::ColorImage {
+    let image = image::load_from_memory(image_data).expect("resources can be loaded");
+    let size = [image.width() as _, image.height() as _];
+    let image_buffer = image.to_rgba8();
+    let pixels = image_buffer.as_flat_samples();
+    egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
+}
+
+fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
+    let mut map = HashMap::new();
+    macro_rules! load {
+        ($x:expr) => {
+            map.insert(
+                $x,
+                ctx.load_texture(
+                    $x,
+                    load_image_from_memory(include_bytes!(concat!("../images/", $x, ".bmp"))),
+                    egui::TextureOptions::default(),
+                ),
+            )
+        };
+    }
+
+    load!("cell_bomb");
+    load!("cell_empty");
+    load!("cell_fire");
+    load!("cell_start_point");
+    load!("cell_teleport");
+    load!("cell_tomb_stone");
+    load!("cell_upgrade_speed");
+    load!("cell_upgrade_speed");
+    load!("cell_upgrade_speed");
+    load!("cell_wall");
+    load!("cell_wood");
+    load!("cell_wood_burning");
+
+    map.insert(
+        "background",
+        ctx.load_texture(
+            "background",
+            egui::ColorImage::new([1, 1], egui::Color32::GRAY),
+            egui::TextureOptions::default(),
+        ),
+    );
+    map
+}

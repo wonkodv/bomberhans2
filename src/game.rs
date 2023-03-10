@@ -52,10 +52,11 @@ pub enum Direction {
     East,
 }
 
+/// Index of a cell
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct CellPosition {
-    x: u32,
-    y: u32,
+    pub x: u32,
+    pub y: u32,
 }
 
 impl CellPosition {
@@ -280,7 +281,7 @@ pub struct Player {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct PlayerState {
+pub struct PlayerState {
     /// current position
     position: Position,
 
@@ -372,7 +373,7 @@ pub enum Cell {
 }
 
 impl Cell {
-    fn to_char(&self) -> char {
+    pub fn to_char(&self) -> char {
         // TODO: how about these: _ 💣 💥 🪦 🏃 💪 🧨 🚪 🏳 🧱 🪜 🔥
         match self {
             Cell::Empty => '_',
@@ -391,7 +392,8 @@ impl Cell {
             Cell::WoodBurning(_) => 'W',
         }
     }
-    fn from_char(chr: char) -> HResult<Self> {
+
+    pub fn from_char(chr: char) -> HResult<Self> {
         let owner = PlayerId(0);
         let power = 1;
         let expire = Time(1);
@@ -416,10 +418,29 @@ impl Cell {
         };
         Ok(cell)
     }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Cell::Empty => "empty",
+            Cell::Bomb { .. } => "bomb",
+            Cell::Fire { .. } => "fire",
+            Cell::TombStone => "tomb_stone",
+            Cell::Upgrade(upgrade) => match upgrade {
+                Upgrade::Speed => "upgrade_speed",
+                Upgrade::Power => "upgrade_speed",
+                Upgrade::Bombs => "upgrade_speed",
+            },
+            Cell::Teleport => "teleport",
+            Cell::StartPoint => "start_point",
+            Cell::Wall => "wall",
+            Cell::Wood => "wood",
+            Cell::WoodBurning(_) => "wood_burning",
+        }
+    }
 }
 
 #[derive(Debug)]
-struct Field {
+pub struct Field {
     width: u32,
     height: u32,
     cells: Vec<Cell>,
@@ -456,7 +477,7 @@ impl Field {
         }
     }
 
-    fn is_cell_in_field(&self, cell: CellPosition) -> bool {
+    pub fn is_cell_in_field(&self, cell: CellPosition) -> bool {
         if cell.x >= self.width {
             false
         } else if cell.y >= self.height {
@@ -466,7 +487,7 @@ impl Field {
         }
     }
 
-    fn string_grid(&self) -> String {
+    pub fn string_grid(&self) -> String {
         let mut s = String::new();
         for y in 0..self.height {
             for x in 0..self.width {
@@ -478,7 +499,7 @@ impl Field {
         s
     }
 
-    fn from_string_grid(string: &str) -> HResult<Self> {
+    pub fn from_string_grid(string: &str) -> HResult<Self> {
         let lines: Vec<&str> = string
             .split('\n')
             .map(|s| s.trim())
@@ -518,11 +539,11 @@ impl Field {
         })
     }
 
-    fn iter(&self) -> impl Iterator<Item = (CellPosition, &Cell)> {
+    pub fn iter(&self) -> impl Iterator<Item = (CellPosition, &Cell)> {
         return self.iter_indices().map(move |pos| (pos, &self[pos]));
     }
 
-    fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
+    pub fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
         let height = self.height;
         return (0..self.width).into_iter().flat_map(move |x| {
             (0..height)
@@ -531,7 +552,7 @@ impl Field {
         });
     }
 
-    fn start_positions(&self) -> Vec<CellPosition> {
+    pub fn start_positions(&self) -> Vec<CellPosition> {
         self.iter()
             .filter_map(|(pos, cell)| {
                 if *cell == Cell::StartPoint {
@@ -677,10 +698,10 @@ impl Game {
 
 #[derive(Debug)]
 pub struct GameState {
-    time: Time,
-    field: Field,
-    player_states: Vec<PlayerState>,
-    game_static: Rc<GameStatic>,
+    pub time: Time,
+    pub field: Field,
+    pub player_states: Vec<PlayerState>,
+    pub game_static: Rc<GameStatic>,
 }
 
 impl GameState {
