@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::Duration;
+use std::time::Instant;
 
 use eframe::egui;
 use egui::pos2;
@@ -14,7 +16,11 @@ use crate::game::Cell;
 use crate::game::CellPosition;
 use crate::game::Game;
 use crate::game::GameState;
+use crate::game::PlayerState;
+use crate::game::Position;
 use crate::game::Rules;
+use crate::game::Time;
+use crate::game::TICKS_PER_SECOND;
 
 const PIXEL_PER_CELL: f32 = 16.0;
 
@@ -29,6 +35,14 @@ fn cell_rect(pos: CellPosition, offset: Pos2) -> egui::Rect {
     let y = pos.y as f32 * PIXEL_PER_CELL + offset.y;
 
     Rect::from_min_max(pos2(x, y), pos2(x + PIXEL_PER_CELL, y + PIXEL_PER_CELL))
+}
+
+fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
+    let x = pos.x as f32 / Position::PLAYER_POSITION_ACCURACY as f32 * PIXEL_PER_CELL + offset.x;
+    let y = pos.y as f32 / Position::PLAYER_POSITION_ACCURACY as f32 * PIXEL_PER_CELL + offset.y;
+    let p = PIXEL_PER_CELL / 2.0;
+
+    Rect::from_min_max(pos2(x - p, y - p), pos2(x + p, y + p))
 }
 
 pub fn gui() {
@@ -46,6 +60,7 @@ pub fn gui() {
                 game_name: "A Game of Bomberhans".into(),
                 player_name: "New Player".into(),
                 textures: None,
+                last_frame: Instant::now(),
             })
         }),
     )
@@ -67,6 +82,22 @@ impl TextureManager {
     fn get_cell(self: &Rc<Self>, cell: &Cell) -> TextureId {
         self.get_texture(&format!("cell_{}", cell.name()))
     }
+
+    fn get_player(self: &Rc<Self>, player: &PlayerState, time: Time) -> TextureId {
+        let odd = if time.ticks() / 20 % 2 == 0 { "2" } else { "" };
+
+        let s = match player.action {
+            crate::game::Action::Standing => "standing",
+            crate::game::Action::Placing => "placing",
+            crate::game::Action::Walking => match player.direction {
+                crate::game::Direction::North => "running_n",
+                crate::game::Direction::West => "running_w",
+                crate::game::Direction::South => "running_s",
+                crate::game::Direction::East => "running_e",
+            },
+        };
+        self.get_texture(&format!("hans_{}{}", s, odd))
+    }
 }
 
 struct MyApp {
@@ -76,6 +107,7 @@ struct MyApp {
     player_name: String,
 
     textures: Option<Rc<TextureManager>>,
+    last_frame: Instant,
 }
 
 impl MyApp {
@@ -110,7 +142,18 @@ impl MyApp {
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
-        let Step::Game(game) = &self.step else {unreachable!();};
+        let Step::Game(game) = &mut self.step else {unreachable!();};
+
+        let now = Instant::now();
+        let duration = now - self.last_frame;
+        self.last_frame = now;
+        let ticks = (duration.as_secs_f32() * TICKS_PER_SECOND as f32).round() as u32;
+        ui.ctx()
+            .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
+
+        for i in 0..ticks {
+            game.game_state.update();
+        }
 
         let width = game.game_static.rules.width as f32 * PIXEL_PER_CELL;
         let height = game.game_static.rules.height as f32 * PIXEL_PER_CELL;
@@ -138,6 +181,17 @@ impl MyApp {
             Shape::image(
                 textures.get_cell(cell),
                 cell_rect(pos, game_field.rect.min),
+                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                Color32::WHITE,
+            )
+        }));
+
+        let time = game.game_state.time;
+
+        painter.extend(game.game_state.player_states.iter().map(|player| {
+            Shape::image(
+                textures.get_player(player, time),
+                player_rect(player.position, game_field.rect.min),
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                 Color32::WHITE,
             )
@@ -192,6 +246,22 @@ fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
     load!("cell_wall");
     load!("cell_wood");
     load!("cell_wood_burning");
+
+    load!("hans_placing");
+    load!("hans_placing2");
+    load!("hans_standing");
+    load!("hans_standing2");
+    load!("hans_walking_e2");
+    load!("hans_walking_e");
+    load!("hans_walking_n2");
+    load!("hans_walking_n");
+    load!("hans_walking_s2");
+    load!("hans_walking_s");
+    load!("hans_walking_w2");
+    load!("hans_walking_w");
+
+    load!("hans_stunned"); // TODO: ?
+    load!("hans_respawned"); // TODO: ?
 
     map.insert(
         "background",

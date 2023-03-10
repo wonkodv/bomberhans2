@@ -5,10 +5,7 @@ use std::ops::Index;
 use std::ops::IndexMut;
 use std::rc::Rc;
 
-/// Player position is tracked in this many fractions of a cell
-const PLAYER_POSITION_ACCURACY: u32 = 100;
-
-const TICKS_PER_SECOND: u32 = 60;
+pub const TICKS_PER_SECOND: u32 = 60;
 
 type HResult<T> = Result<T, String>;
 
@@ -16,8 +13,15 @@ type HResult<T> = Result<T, String>;
 pub struct Time(u32);
 
 impl Time {
-    fn from_seconds(seconds: u32) -> Self {
+    pub fn from_seconds(seconds: u32) -> Self {
         Self(seconds * TICKS_PER_SECOND)
+    }
+
+    pub fn seconds(self) -> u32 {
+        self.0 / TICKS_PER_SECOND
+    }
+    pub fn ticks(self) -> u32 {
+        self.0
     }
 }
 
@@ -79,11 +83,14 @@ impl CellPosition {
 /// Player positions
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Position {
-    x: u32,
-    y: u32,
+    pub x: u32,
+    pub y: u32,
 }
 
 impl Position {
+    /// Player position is tracked in this many fractions of a cell
+    pub const PLAYER_POSITION_ACCURACY: u32 = 100;
+
     fn new(x: u32, y: u32) -> Self {
         Self { x, y }
     }
@@ -102,15 +109,15 @@ impl Position {
 
     fn as_cell_pos(&self) -> CellPosition {
         CellPosition {
-            x: self.x / PLAYER_POSITION_ACCURACY,
-            y: self.y / PLAYER_POSITION_ACCURACY,
+            x: self.x / Self::PLAYER_POSITION_ACCURACY,
+            y: self.y / Self::PLAYER_POSITION_ACCURACY,
         }
     }
 
     fn from_cell_position(p: CellPosition) -> Self {
         Self {
-            x: p.x * PLAYER_POSITION_ACCURACY + PLAYER_POSITION_ACCURACY / 2,
-            y: p.y * PLAYER_POSITION_ACCURACY + PLAYER_POSITION_ACCURACY / 2,
+            x: p.x * Self::PLAYER_POSITION_ACCURACY + Self::PLAYER_POSITION_ACCURACY / 2,
+            y: p.y * Self::PLAYER_POSITION_ACCURACY + Self::PLAYER_POSITION_ACCURACY / 2,
         }
     }
 }
@@ -283,31 +290,31 @@ pub struct Player {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlayerState {
     /// current position
-    position: Position,
+    pub position: Position,
 
     /// number of deaths since the game started
-    deaths: u32,
+    pub deaths: u32,
 
     /// number of kills since the game started
-    kills: u32,
+    pub kills: u32,
 
     /// current bomb power upgrades
-    power: u8,
+    pub power: u8,
 
     /// current walking speed upgrades
-    speed: u8,
+    pub speed: u8,
 
     /// current bomb capacity upgrades
-    bombs: u8,
+    pub bombs: u8,
 
     /// current placed bombs. Increased when placing, decreased when exploding.
-    current_bombs_placed: u8,
+    pub current_bombs_placed: u8,
 
     /// current action
-    action: Action,
+    pub action: Action,
 
     /// current direction
-    direction: Direction,
+    pub direction: Direction,
     // TODO: track total walking distance, total bombs, ...
 }
 
