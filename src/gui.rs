@@ -4,7 +4,9 @@ use std::rc::Rc;
 use eframe::egui;
 use egui::pos2;
 use egui::Color32;
+use egui::Pos2;
 use egui::Rect;
+use egui::Shape;
 use egui::TextureHandle;
 use egui::TextureId;
 
@@ -22,9 +24,9 @@ enum Step {
     GameOver(String),
 }
 
-fn cell_rect(pos: CellPosition) -> egui::Rect {
-    let x = pos.x as f32 * PIXEL_PER_CELL;
-    let y = pos.y as f32 * PIXEL_PER_CELL;
+fn cell_rect(pos: CellPosition, offset: Pos2) -> egui::Rect {
+    let x = pos.x as f32 * PIXEL_PER_CELL + offset.x;
+    let y = pos.y as f32 * PIXEL_PER_CELL + offset.y;
 
     Rect::from_min_max(pos2(x, y), pos2(x + PIXEL_PER_CELL, y + PIXEL_PER_CELL))
 }
@@ -123,16 +125,8 @@ impl MyApp {
 
         let painter = ui.painter_at(game_field.rect);
 
-        let rect = egui::Rect::from_min_size(
-            egui::Pos2::ZERO,
-            egui::Vec2 {
-                x: width,
-                y: height,
-            },
-        );
-
         painter.rect_stroke(
-            rect,
+            game_field.rect,
             egui::Rounding::none(),
             egui::Stroke {
                 width: 2.0,
@@ -140,14 +134,14 @@ impl MyApp {
             },
         );
 
-        game.game_state.field.iter().for_each(|(pos, cell)| {
-            painter.image(
-                textures.get_cell(cell).into(),
-                cell_rect(pos),
+        painter.extend(game.game_state.field.iter().map(|(pos, cell)| {
+            Shape::image(
+                textures.get_cell(cell),
+                cell_rect(pos, game_field.rect.min),
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                 Color32::WHITE,
-            );
-        });
+            )
+        }));
     }
 }
 
