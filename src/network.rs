@@ -1,6 +1,5 @@
 const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
 
-
 struct Header {
     magic: u32,
     sequence: u32,
@@ -18,4 +17,3 @@ impl Header {
         }
     }
 }
-

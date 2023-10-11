@@ -1,3 +1,6 @@
+use log::*;
+use std::cmp::max;
+use std::cmp::min;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
@@ -80,11 +83,23 @@ impl CellPosition {
     }
 }
 
+impl fmt::Display for CellPosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:02}/{:02})", self.x, self.y)
+    }
+}
+
 /// Player positions
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Position {
     pub x: u32,
     pub y: u32,
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{:02}/{:02}]", self.x, self.y)
+    }
 }
 
 impl Position {
@@ -210,7 +225,7 @@ pub struct Rules {
     /// player walking speed at initial upgrade [cells/100/s]
     pub speed_multiplyer: u32,
 
-    /// player walking speed upgrade start value
+    /// player walking speed upgrade start value [cells/100/s]
     pub speed_offset: u32,
 
     /// percentage that walking on bomb succeeds each update
@@ -246,8 +261,19 @@ impl Default for Rules {
 }
 
 impl Rules {
+    /// Walking Speed based on speed_powerup
+    /// returned speed is returned in (Cell×TICKS_PER_SECOND)/(PLAYER_POSITION_ACCURACY×s)
+    /// so a speed of 1 is 60/100 cells/s
+    ///
+    /// Speed of input variables is Cells/100s
     fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
-        (self.speed_offset + u32::from(player_speed)) * self.speed_multiplyer
+        return 5; // TODO: I'm too tired to get this right
+
+        /*
+        (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer))
+                / PLAYER_POSITION_ACCURACY
+                * TICKS_PER_SECOND,
+                * */
     }
 }
 
@@ -326,7 +352,7 @@ impl PlayerState {
             kills: 0,
             power: 1,
             speed: 1,
-            bombs: 0,
+            bombs: 1,
             current_bombs_placed: 0,
             action: Action::Standing,
             direction: Direction::South,
@@ -715,10 +741,23 @@ impl GameState {
     }
 
     pub fn set_player_action(&mut self, player_id: PlayerId, action: Action) {
+        log::info!(
+            "{:?} Player[{:?}].action = {:?}",
+            self.time.0,
+            player_id.0,
+            action
+        );
         let player_state = &mut self.player_states[player_id.0];
         player_state.action = action;
     }
+
     pub fn set_player_direction(&mut self, player_id: PlayerId, direction: Direction) {
+        log::info!(
+            "{:?} Player[{:?}].direction = {:?}",
+            self.time.0,
+            player_id.0,
+            direction
+        );
         let player_state = &mut self.player_states[player_id.0];
         player_state.direction = direction;
     }
@@ -732,8 +771,13 @@ impl GameState {
             Action::Standing => {}
             Action::Placing => {
                 // GAME RULE: can not place more bombs than you have bomb powerups
-                if player_state.current_bombs_placed != player_state.bombs {
-                    // log out of bombs
+                if player_state.current_bombs_placed >= player_state.bombs {
+                    log::info!(
+                        "{:?} Player[{:?}] out of bombs {}",
+                        self.time.0,
+                        player_id.0,
+                        player_state.bombs
+                    );
                 } else {
                     let position = player_state
                         .position
@@ -747,6 +791,12 @@ impl GameState {
                             // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
                             // if you have enough bombs to place
                             if let Cell::Upgrade(upgrade) = cell {
+                                log::info!(
+                                    "{:?} Player[{:?}] @ {}: ",
+                                    self.time.0,
+                                    player_id.0,
+                                    player_state.position
+                                );
                                 player_state.eat(*upgrade);
                             }
 
@@ -765,12 +815,27 @@ impl GameState {
                                 };
                             }
                         } else {
+                            log::info!(
+                                "{:?} Player[{:?}] @ {} not placing to {}",
+                                self.time.0,
+                                player_id.0,
+                                player_state.position,
+                                position
+                            );
                             // TODO: log not placing at position (x or y too large)
                         }
                     } else {
+                        log::info!(
+                            "{:?} Player[{:?}] @ {} not placing",
+                            self.time.0,
+                            player_id.0,
+                            player_state.position,
+                        );
                         // TODO: log not placing at position (x or y too small)
                     }
                 }
+                player_state.action = Action::Standing; // TODO: remove line so player is still
+                                                        // placing and looks funnier?
             }
             Action::Walking => {
                 let position = player_state.position.add(
@@ -785,6 +850,15 @@ impl GameState {
                     let cell_position = position.as_cell_pos();
                     if self.field.is_cell_in_field(cell_position) {
                         let cell = &self.field[cell_position];
+                        log::info!(
+                            "{:?} Player[{:?}] @ {} walking to {} == {} ({:?}) ",
+                            self.time.0,
+                            player_id.0,
+                            player_state.position,
+                            position,
+                            cell_position,
+                            &cell
+                        );
                         match cell {
                             Cell::StartPoint | Cell::Empty => {
                                 player_state.move_(position);
@@ -878,30 +952,28 @@ impl GameState {
             }
         };
         if explodes {
-            let power: u32 = power.into();
+            let power: isize = power.into();
             self.field[cell] = Cell::Fire {
                 owner,
                 expire: self.game_static.rules.fire_burn_time,
             };
             if power > 0 {
-                for i in 1..=power {
-                    if !self.set_on_fire(CellPosition::new(cell.x + i, cell.y), owner, true) {
-                        break;
-                    };
-                }
-                for i in 1..=power {
-                    if !self.set_on_fire(CellPosition::new(cell.x - i, cell.y), owner, true) {
-                        break;
-                    }
-                }
-                for i in 1..=power {
-                    if !self.set_on_fire(CellPosition::new(cell.x, cell.y + i), owner, true) {
-                        break;
-                    }
-                }
-                for i in 1..=power {
-                    if !self.set_on_fire(CellPosition::new(cell.x, cell.y - i), owner, true) {
-                        break;
+                let x = cell.x as isize;
+                let y = cell.y as isize;
+                for (dx, dy) in [(-1, 0), (1, 0), (0, 1), (0, -1)] {
+                    for i in 1..=power {
+                        let x = x + dx * i;
+                        let y = x + dy * i;
+                        if x >= 0 && y >= 0 {
+                            let pos = CellPosition::new(x as u32, y as u32);
+                            if self.field.is_cell_in_field(pos) {
+                                if !self.set_on_fire(pos, owner, true) {
+                                    break;
+                                }
+                            }
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
@@ -997,6 +1069,13 @@ mod test {
     }
 
     #[test]
+    fn test_walking_distance() {
+        let r = Rules::default();
+        assert_eq!(r.get_update_walk_distance(1), 4);
+        assert_eq!(r.get_update_walk_distance(2), 4);
+    }
+
+    #[test]
     fn test_random() {
         let r = random(Time(0), 0, 0);
         assert_eq!(r, random(Time(0), 0, 0));
@@ -1048,6 +1127,7 @@ mod test {
             Position::new(550, 950)
         );
     }
+
     #[test]
     fn test_pos_to_cell() {
         assert_eq!(
@@ -1115,8 +1195,8 @@ mod test {
             field.start_positions(),
             vec![
                 CellPosition { x: 0, y: 0 },
-                CellPosition { x: 16, y: 0 },
                 CellPosition { x: 0, y: 12 },
+                CellPosition { x: 16, y: 0 },
                 CellPosition { x: 16, y: 12 }
             ]
         );

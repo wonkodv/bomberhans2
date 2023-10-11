@@ -144,7 +144,9 @@ impl MyApp {
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
-        let Step::Game(game) = &mut self.step else {unreachable!();};
+        let Step::Game(game) = &mut self.step else {
+            unreachable!();
+        };
 
         let now = Instant::now();
         let duration = now - self.last_frame;
@@ -153,7 +155,6 @@ impl MyApp {
         ui.ctx()
             .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
 
-        log
         for i in 0..ticks {
             game.game_state.update();
         }

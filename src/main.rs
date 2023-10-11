@@ -1,4 +1,7 @@
-#![cfg_attr(debug_assertions, allow(dead_code, unused_imports, unused_variables, unreachable_code))]
+#![cfg_attr(
+    debug_assertions,
+    allow(dead_code, unused_imports, unused_variables, unreachable_code)
+)]
 
 mod game;
 mod gui;
