@@ -12,8 +12,10 @@ use egui::Shape;
 use egui::TextureHandle;
 use egui::TextureId;
 
+use crate::game::Action;
 use crate::game::Cell;
 use crate::game::CellPosition;
+use crate::game::Direction;
 use crate::game::Game;
 use crate::game::GameState;
 use crate::game::PlayerState;
@@ -90,10 +92,10 @@ impl TextureManager {
             crate::game::Action::Standing => "standing",
             crate::game::Action::Placing => "placing",
             crate::game::Action::Walking => match player.direction {
-                crate::game::Direction::North => "running_n",
-                crate::game::Direction::West => "running_w",
-                crate::game::Direction::South => "running_s",
-                crate::game::Direction::East => "running_e",
+                crate::game::Direction::North => "walking_n",
+                crate::game::Direction::West => "walking_w",
+                crate::game::Direction::South => "walking_s",
+                crate::game::Direction::East => "walking_e",
             },
         };
         self.get_texture(&format!("hans_{}{}", s, odd))
@@ -151,8 +153,34 @@ impl MyApp {
         ui.ctx()
             .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
 
+        log
         for i in 0..ticks {
             game.game_state.update();
+        }
+
+        if ui.ctx().input_mut().key_pressed(egui::Key::Space) {
+            game.game_state
+                .set_player_action(game.local_player, Action::Placing);
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::W) {
+            game.game_state
+                .set_player_direction(game.local_player, Direction::North);
+            game.game_state
+                .set_player_action(game.local_player, Action::Walking);
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
+            game.game_state
+                .set_player_direction(game.local_player, Direction::South);
+            game.game_state
+                .set_player_action(game.local_player, Action::Walking);
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
+            game.game_state
+                .set_player_direction(game.local_player, Direction::West);
+            game.game_state
+                .set_player_action(game.local_player, Action::Walking);
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::D) {
+            game.game_state
+                .set_player_direction(game.local_player, Direction::East);
+            game.game_state
+                .set_player_action(game.local_player, Action::Walking);
         }
 
         let width = game.game_static.rules.width as f32 * PIXEL_PER_CELL;
@@ -200,7 +228,7 @@ impl MyApp {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Bomberhans");
             match self.step {
@@ -208,6 +236,9 @@ impl eframe::App for MyApp {
                 Step::Game(_) => self.update_game(ui),
             }
         });
+        if !frame.is_web() {
+            egui::gui_zoom::zoom_with_keyboard_shortcuts(ctx, frame.info().native_pixels_per_point);
+        }
     }
 }
 
