@@ -76,7 +76,7 @@ impl CellPosition {
         if self.x == other.x {
             Some(self.y.abs_diff(other.y))
         } else if self.y == other.y {
-            Some(self.y.abs_diff(other.y))
+            Some(self.x.abs_diff(other.x))
         } else {
             None
         }
@@ -199,7 +199,7 @@ impl Ratios {
         random -= self.wood;
 
         assert!(random < self.clear);
-        return Cell::Empty;
+        Cell::Empty
     }
 }
 
@@ -267,7 +267,7 @@ impl Rules {
     ///
     /// Speed of input variables is Cells/100s
     fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
-        return 5; // TODO: I'm too tired to get this right
+        5 // TODO: I'm too tired to get this right
 
         /*
         (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer))
@@ -488,9 +488,8 @@ impl Field {
         assert!(width % 2 == 1);
         assert!(height % 2 == 1);
         let cells: Vec<Cell> = (0..height)
-            .into_iter()
             .flat_map(|y| {
-                (0..width).into_iter().map(move |x| {
+                (0..width).map(move |x| {
                     let x = if x >= width / 2 { width - x - 1 } else { x };
                     let y = if y >= height / 2 { height - y - 1 } else { y };
 
@@ -515,13 +514,7 @@ impl Field {
     }
 
     pub fn is_cell_in_field(&self, cell: CellPosition) -> bool {
-        if cell.x >= self.width {
-            false
-        } else if cell.y >= self.height {
-            false
-        } else {
-            true
-        }
+        cell.x < self.width && cell.y < self.height
     }
 
     pub fn string_grid(&self) -> String {
@@ -577,16 +570,12 @@ impl Field {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (CellPosition, &Cell)> {
-        return self.iter_indices().map(move |pos| (pos, &self[pos]));
+        self.iter_indices().map(move |pos| (pos, &self[pos]))
     }
 
     pub fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
         let height = self.height;
-        return (0..self.width).into_iter().flat_map(move |x| {
-            (0..height)
-                .into_iter()
-                .map(move |y| CellPosition::new(x, y))
-        });
+        (0..self.width).flat_map(move |x| (0..height).map(move |y| CellPosition::new(x, y)))
     }
 
     pub fn start_positions(&self) -> Vec<CellPosition> {
@@ -666,7 +655,6 @@ impl Game {
         let local_player = PlayerId(1);
 
         let players: Vec<Player> = (0..(rules.players as usize))
-            .into_iter()
             .map(|id| Player {
                 name: {
                     if id == local_player.0 as _ {
@@ -1165,7 +1153,7 @@ mod test {
              _#+#+#+#+#_
              O_+++++++_O
             "
-            .replace(" ", "")
+            .replace(' ', "")
         );
     }
 
@@ -1183,7 +1171,7 @@ mod test {
                     _#+#F#+#+#_
                     O_++F+T++_O
             "
-        .replace(" ", "");
+        .replace(' ', "");
         assert_eq!(Field::from_string_grid(&s).unwrap().string_grid(), s);
     }
 
