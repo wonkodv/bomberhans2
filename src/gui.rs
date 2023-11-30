@@ -28,7 +28,7 @@ const PIXEL_PER_CELL: f32 = 16.0;
 
 enum Step {
     Initial,
-    Game(Game),
+    Game(GameState),
     GameOver(String),
 }
 
@@ -138,13 +138,15 @@ impl MyApp {
         ui.add(egui::Slider::new(&mut self.rules.players, 1..=4).text("Players"));
         if ui.button("Start local Game").clicked() {
             let game = Game::new_local_game(self.game_name.clone(), self.rules.clone());
-            self.step = Step::Game(game);
+            let game = Rc::new(game);
+            let game_state = GameState::new(game);
+            self.step = Step::Game(game_state);
         }
     }
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
-        let Step::Game(game) = &mut self.step else {
+        let Step::Game(game_state) = &mut self.step else {
             unreachable!();
         };
 
@@ -156,36 +158,27 @@ impl MyApp {
             .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
 
         for i in 0..ticks {
-            game.game_state.update();
+            game_state.update();
         }
 
         if ui.ctx().input_mut().key_pressed(egui::Key::Space) {
-            game.game_state
-                .set_player_action(game.local_player, Action::Placing);
+            game_state.set_player_action(game_state.game.local_player, Action::Placing);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::W) {
-            game.game_state
-                .set_player_direction(game.local_player, Direction::North);
-            game.game_state
-                .set_player_action(game.local_player, Action::Walking);
+            game_state.set_player_direction(game_state.game.local_player, Direction::North);
+            game_state.set_player_action(game_state.game.local_player, Action::Walking);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
-            game.game_state
-                .set_player_direction(game.local_player, Direction::South);
-            game.game_state
-                .set_player_action(game.local_player, Action::Walking);
+            game_state.set_player_direction(game_state.game.local_player, Direction::South);
+            game_state.set_player_action(game_state.game.local_player, Action::Walking);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
-            game.game_state
-                .set_player_direction(game.local_player, Direction::West);
-            game.game_state
-                .set_player_action(game.local_player, Action::Walking);
+            game_state.set_player_direction(game_state.game.local_player, Direction::West);
+            game_state.set_player_action(game_state.game.local_player, Action::Walking);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::D) {
-            game.game_state
-                .set_player_direction(game.local_player, Direction::East);
-            game.game_state
-                .set_player_action(game.local_player, Action::Walking);
+            game_state.set_player_direction(game_state.game.local_player, Direction::East);
+            game_state.set_player_action(game_state.game.local_player, Action::Walking);
         }
 
-        let width = game.game_static.rules.width as f32 * PIXEL_PER_CELL;
-        let height = game.game_static.rules.height as f32 * PIXEL_PER_CELL;
+        let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
+        let height = game_state.game.rules.height as f32 * PIXEL_PER_CELL;
 
         let game_field = ui.image(
             textures.get_texture("background"),
@@ -206,7 +199,7 @@ impl MyApp {
             },
         );
 
-        painter.extend(game.game_state.field.iter().map(|(pos, cell)| {
+        painter.extend(game_state.field.iter().map(|(pos, cell)| {
             Shape::image(
                 textures.get_cell(cell),
                 cell_rect(pos, game_field.rect.min),
@@ -215,9 +208,9 @@ impl MyApp {
             )
         }));
 
-        let time = game.game_state.time;
+        let time = game_state.time;
 
-        painter.extend(game.game_state.player_states.iter().map(|player| {
+        painter.extend(game_state.player_states.iter().map(|player| {
             Shape::image(
                 textures.get_player(player, time),
                 player_rect(player.position, game_field.rect.min),
