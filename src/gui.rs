@@ -21,7 +21,7 @@ use crate::game::GameState;
 use crate::game::PlayerState;
 use crate::game::Position;
 use crate::game::Rules;
-use crate::game::Time;
+use crate::game::TimeStamp;
 use crate::game::TICKS_PER_SECOND;
 
 const PIXEL_PER_CELL: f32 = 16.0;
@@ -85,8 +85,12 @@ impl TextureManager {
         self.get_texture(&format!("cell_{}", cell.name()))
     }
 
-    fn get_player(self: &Rc<Self>, player: &PlayerState, time: Time) -> TextureId {
-        let odd = if time.ticks() / 20 % 2 == 0 { "2" } else { "" };
+    fn get_player(self: &Rc<Self>, player: &PlayerState, time: TimeStamp) -> TextureId {
+        let odd = if time.ticks_from_start() / 20 % 2 == 0 {
+            "2"
+        } else {
+            ""
+        };
 
         let s = match player.action {
             crate::game::Action::Standing => "standing",

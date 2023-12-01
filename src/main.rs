@@ -6,6 +6,7 @@
 mod game;
 mod gui;
 mod network;
+mod utils;
 
 fn main() {
     env_logger::init();
