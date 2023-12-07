@@ -1,7 +1,5 @@
 use crate::utils::Idx;
 
-
-
 use std::collections::HashSet;
 
 use std::fmt;
@@ -91,7 +89,7 @@ impl CellPosition {
     }
 
     /// Distance if in line of fire
-    fn fire_distance(&self, other: &Self) -> Option<u32> {
+    fn fire_distance(self, other: Self) -> Option<u32> {
         if self.x == other.x {
             Some(self.y.abs_diff(other.y))
         } else if self.y == other.y {
@@ -129,9 +127,9 @@ impl Position {
         Self { x, y }
     }
 
-    /// move position `distance` into  `direction
-    fn add(&self, direction: Direction, distance: i32) -> Option<Self> {
-        let Self { x, y } = *self;
+    /// move position `distance` into  `direction`
+    fn add(self, direction: Direction, distance: i32) -> Option<Self> {
+        let Self { x, y } = self;
         let (x, y) = match direction {
             Direction::North => (x, y.checked_add_signed(-distance)?),
             Direction::West => (x.checked_add_signed(-distance)?, y),
@@ -141,7 +139,7 @@ impl Position {
         Some(Self::new(x, y))
     }
 
-    fn as_cell_pos(&self) -> CellPosition {
+    fn as_cell_pos(self) -> CellPosition {
         CellPosition {
             x: self.x / Self::PLAYER_POSITION_ACCURACY,
             y: self.y / Self::PLAYER_POSITION_ACCURACY,
@@ -280,19 +278,17 @@ impl Default for Rules {
 }
 
 impl Rules {
-    /// Walking Speed based on speed_powerup
-    /// returned speed is returned in (Cell×TICKS_PER_SECOND)/(PLAYER_POSITION_ACCURACY×s)
+    /// Walking Speed based on `speed_powerup`
+    /// returned speed is returned in `(Cell×TICKS_PER_SECOND)/(PLAYER_POSITION_ACCURACY×s)`
     /// so a speed of 1 is 60/100 cells/s
     ///
     /// Speed of input variables is Cells/100s
     fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
-        5 // TODO: I'm too tired to get this right
-
-        /*
+        return 5;
+        // TODO: I'm too tired to get this right
         (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer))
-                / PLAYER_POSITION_ACCURACY
-                * TICKS_PER_SECOND,
-                * */
+            / Position::PLAYER_POSITION_ACCURACY
+            * TICKS_PER_SECOND
     }
 }
 
@@ -442,7 +438,7 @@ pub enum Cell {
 impl Cell {
     pub fn to_char(&self) -> char {
         // TODO: how about these: _ 💣 💥 🪦 🏃 💪 🧨 🚪 🏳 🧱 🪜 🔥
-        match self {
+        match *self {
             Cell::Empty => '_',
             Cell::Bomb { .. } => 'B',
             Cell::Fire { .. } => 'F',
@@ -482,27 +478,27 @@ impl Cell {
             '#' => Cell::Wall,
             '+' => Cell::Wood,
             'W' => Cell::WoodBurning { expire },
-            chr => return Err(format!("Invalid character {}", chr)),
+            chr => return Err(format!("Invalid character {chr}")),
         };
         Ok(cell)
     }
 
     pub fn name(&self) -> &'static str {
-        match self {
+        match *self {
             Cell::Empty => "empty",
             Cell::Bomb { .. } => "bomb",
             Cell::Fire { .. } => "fire",
             Cell::TombStone(..) => "tomb_stone",
             Cell::Upgrade(upgrade) => match upgrade {
                 Upgrade::Speed => "upgrade_speed",
-                Upgrade::Power => "upgrade_speed",
-                Upgrade::Bombs => "upgrade_speed",
+                Upgrade::Power => "upgrade_power",
+                Upgrade::Bombs => "upgrade_bomb",
             },
             Cell::Teleport => "teleport",
             Cell::StartPoint => "start_point",
             Cell::Wall => "wall",
             Cell::Wood => "wood",
-            Cell::WoodBurning { expire: _ } => "wood_burning",
+            Cell::WoodBurning { .. } => "wood_burning",
         }
     }
 }
@@ -567,7 +563,7 @@ impl Field {
     pub fn new_from_string_grid(string: &str) -> HResult<Self> {
         let lines: Vec<&str> = string
             .split('\n')
-            .map(|s| s.trim())
+            .map(str::trim)
             .filter(|s| !s.is_empty())
             .collect();
         if lines.is_empty() {
@@ -684,7 +680,7 @@ impl Game {
             .map(|id| Player {
                 name: {
                     if id == local_player.0 as _ {
-                        format!("Player {}", id)
+                        format!("Player {id}")
                     } else {
                         "Local Player".into()
                     }
@@ -705,7 +701,7 @@ impl Game {
 
 /// The variable state of the game at a given time
 #[derive(Debug, Clone)]
-pub struct GameState {
+pub struct State {
     pub time: TimeStamp,
     pub field: Field,
     pub player_states: Vec<PlayerState>,
@@ -713,7 +709,7 @@ pub struct GameState {
 }
 
 /// APIs
-impl GameState {
+impl State {
     pub fn new(game: Rc<Game>) -> Self {
         let time = TimeStamp::default();
 
@@ -767,182 +763,189 @@ impl GameState {
 }
 
 /// Update functions, that modify the Game State
-impl GameState {
+impl State {
     fn increment_game_time(&mut self) {
         self.time = self.time + Duration::from_ticks(1);
     }
 
     /// advance a player 1 tick
     fn update_player(&mut self, player_id: PlayerId) {
-        let player = &self.game.players[player_id.0];
-        let player_state = &mut self.player_states[player_id.0];
-
-        match player_state.action {
+        match self.player_states[player_id.0].action {
             Action::Standing => {}
             Action::Placing => {
-                // GAME RULE: can not place more bombs than you have bomb powerups
-                if player_state.current_bombs_placed >= player_state.bombs {
-                    log::info!(
-                        "{:?} Player[{:?}] out of bombs {}",
-                        self.time,
-                        player_id.0,
-                        player_state.bombs
-                    );
-                } else {
-                    let position = player_state
-                        .position
-                        .add(player_state.direction, -self.game.rules.bomb_offset);
-
-                    if let Some(position) = position {
-                        let cell_position = position.as_cell_pos();
-                        if self.field.is_cell_in_field(cell_position) {
-                            let cell = &mut self.field[cell_position];
-
-                            // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
-                            // if you have enough bombs to place
-                            if let Cell::Upgrade(upgrade) = cell {
-                                log::info!(
-                                    "{:?} Player[{:?}] @ {}: ",
-                                    self.time,
-                                    player_id.0,
-                                    player_state.position
-                                );
-                                player_state.eat(*upgrade);
-                            }
-
-                            // TODO: placing Bombs into TP and have the Bomb Port would be funny
-                            // TODO: place Bomb into fire for immediate explosion?
-
-                            // GAME_RULE: Bombs can only be placed on empty Cells (after eating any powerups
-                            // there were)
-                            if Cell::Empty == *cell {
-                                player_state.current_bombs_placed += 1;
-                                *cell = Cell::Bomb {
-                                    owner: player_id,
-                                    expire: self.time + self.game.rules.bomb_time,
-                                    // GAME_RULE: power is set AFTER eating powerups at cell
-                                    power: player_state.power,
-                                };
-                                log::info!(
-                                    "{:?} Player[{:?}] @ {} placed  {:?}",
-                                    self.time,
-                                    player_id.0,
-                                    player_state.position,
-                                    cell
-                                );
-                            }
-                        } else {
-                            log::debug!(
-                                "{:?} Player[{:?}] @ {} not placing to {}",
-                                self.time,
-                                player_id.0,
-                                player_state.position,
-                                position
-                            );
-                            // TODO: log not placing at position (x or y too large)
-                        }
-                    } else {
-                        log::debug!(
-                            "{:?} Player[{:?}] @ {} not placing",
-                            self.time,
-                            player_id.0,
-                            player_state.position,
-                        );
-                        // TODO: log not placing at position (x or y too small)
-                    }
-                }
-                player_state.action = Action::Standing; // TODO: remove line so player is still
-                                                        // placing and looks funnier?
+                self.place_bomb(player_id);
             }
             Action::Walking => {
-                let position = player_state.position.add(
-                    player_state.direction,
-                    self.game
-                        .rules
-                        .get_update_walk_distance(player_state.speed)
-                        .try_into()
-                        .expect("walked distance fits i32"),
-                );
-                if let Some(position) = position {
-                    let cell_position = position.as_cell_pos();
-                    if self.field.is_cell_in_field(cell_position) {
-                        let cell = &self.field[cell_position];
-                        log::info!(
-                            "{:?} Player[{:?}] @ {} walking to {} == {} ({:?}) ",
-                            self.time,
-                            player_id.0,
-                            player_state.position,
-                            position,
-                            cell_position,
-                            &cell
-                        );
-                        match cell {
-                            Cell::StartPoint | Cell::Empty => {
-                                player_state.move_(position);
-                            }
-                            Cell::Bomb { .. } | Cell::TombStone(..) => {
-                                if random(self.time, position.x, position.y) % 100
-                                    < self.game.rules.bomb_walking_chance.into()
-                                {
-                                    // GAME_RULE: walking on bombs randomly happens or doesn't, decided
-                                    // each update.
-                                    player_state.move_(position);
-                                }
-                            }
-                            Cell::Fire { owner, .. } => {
-                                log::info!(
-                                    "{:?} Player[{:?}] @ {} suicided",
-                                    self.time,
-                                    player_id.0,
-                                    player_state.position,
-                                );
-                                // GAME_RULE: walking into fire counts as kill by fire owner
-                                // TODO: seperate counter?
-                                player_state.die(*owner, player.start_position);
-                                self.player_states[owner.0].score(player_id);
-                                self.field[cell_position] = Cell::TombStone(player_id);
-                            }
-                            Cell::Upgrade(upgrade) => {
-                                player_state.move_(position);
-                                player_state.eat(*upgrade);
-                                self.field[cell_position] = Cell::Empty;
-                            }
-                            Cell::Teleport => {
-                                let targets: Vec<(CellPosition, &Cell)> = self
-                                    .field
-                                    .iter()
-                                    .filter(|(pos, cell)| {
-                                        **cell == Cell::Teleport && *pos != cell_position
-                                    })
-                                    .collect();
-                                if targets.len() > 1 {
-                                    let target = targets[random(self.time, position.x, position.y)
-                                        as usize
-                                        % targets.len()];
-                                    let (to, target_cell): (_, &Cell) = target;
-                                    assert_eq!(*target_cell, Cell::Teleport);
-
-                                    player_state.move_(Position::from_cell_position(to));
-
-                                    debug_assert_eq!(self.field[cell_position], Cell::Teleport);
-                                    debug_assert_eq!(self.field[to], Cell::Teleport);
-                                    self.field[cell_position] = Cell::Empty;
-                                    self.field[to] = Cell::Empty;
-                                } else {
-                                    player_state.move_(position);
-                                }
-                            }
-                            Cell::Wall | Cell::Wood | Cell::WoodBurning { .. } => {} /* no walking through walls */
-                        }
-                    }
-                }
+                self.walk(player_id);
             }
         };
     }
 
+    fn walk(&mut self, player_id: PlayerId) {
+        let player = &self.game.players[player_id.0];
+        let player_state = &mut self.player_states[player_id.0];
+        let position = player_state.position.add(
+            player_state.direction,
+            self.game
+                .rules
+                .get_update_walk_distance(player_state.speed)
+                .try_into()
+                .expect("walked distance fits i32"),
+        );
+        if let Some(position) = position {
+            let cell_position = position.as_cell_pos();
+            if self.field.is_cell_in_field(cell_position) {
+                let cell = &self.field[cell_position];
+                log::info!(
+                    "{:?} Player[{:?}] @ {} walking to {} == {} ({:?}) ",
+                    self.time,
+                    player_id.0,
+                    player_state.position,
+                    position,
+                    cell_position,
+                    &cell
+                );
+                match *cell {
+                    Cell::StartPoint | Cell::Empty => {
+                        player_state.move_(position);
+                    }
+                    Cell::Bomb { .. } | Cell::TombStone(..) => {
+                        if random(self.time, position.x, position.y) % 100
+                            < self.game.rules.bomb_walking_chance.into()
+                        {
+                            // GAME_RULE: walking on bombs randomly happens or doesn't, decided
+                            // each update.
+                            player_state.move_(position);
+                        }
+                    }
+                    Cell::Fire { owner, .. } => {
+                        log::info!(
+                            "{:?} Player[{:?}] @ {} suicided",
+                            self.time,
+                            player_id.0,
+                            player_state.position,
+                        );
+                        // GAME_RULE: walking into fire counts as kill by fire owner
+                        // TODO: seperate counter?
+                        player_state.die(owner, player.start_position);
+                        self.player_states[owner.0].score(player_id);
+                        self.field[cell_position] = Cell::TombStone(player_id);
+                    }
+                    Cell::Upgrade(upgrade) => {
+                        player_state.move_(position);
+                        player_state.eat(upgrade);
+                        self.field[cell_position] = Cell::Empty;
+                    }
+                    Cell::Teleport => {
+                        let targets: Vec<(CellPosition, &Cell)> = self
+                            .field
+                            .iter()
+                            .filter(|(pos, cell)| *cell == Cell::Teleport && pos != cell_position)
+                            .collect();
+                        if targets.len() > 1 {
+                            let target = targets[random(self.time, position.x, position.y)
+                                as usize
+                                % targets.len()];
+                            let (to, target_cell): (_, &Cell) = target;
+                            assert_eq!(*target_cell, Cell::Teleport);
+
+                            player_state.move_(Position::from_cell_position(to));
+
+                            debug_assert_eq!(self.field[cell_position], Cell::Teleport);
+                            debug_assert_eq!(self.field[to], Cell::Teleport);
+                            self.field[cell_position] = Cell::Empty;
+                            self.field[to] = Cell::Empty;
+                        } else {
+                            player_state.move_(position);
+                        }
+                    }
+                    Cell::Wall | Cell::Wood | Cell::WoodBurning { .. } => {} /* no walking through walls */
+                }
+            }
+        }
+    }
+
+    fn place_bomb(&mut self, player_id: PlayerId) {
+        let player = &self.game.players[player_id.0];
+        let player_state = &mut self.player_states[player_id.0];
+        // GAME RULE: can not place more bombs than you have bomb powerups
+        if player_state.current_bombs_placed >= player_state.bombs {
+            log::info!(
+                "{:?} Player[{:?}] out of bombs {}",
+                self.time,
+                player_id.0,
+                player_state.bombs
+            );
+        } else {
+            let position = player_state
+                .position
+                .add(player_state.direction, -self.game.rules.bomb_offset);
+
+            if let Some(position) = position {
+                let cell_position = position.as_cell_pos();
+                if self.field.is_cell_in_field(cell_position) {
+                    let cell = &mut self.field[cell_position];
+
+                    // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
+                    // if you have enough bombs to place
+                    if let Cell::Upgrade(upgrade) = cell {
+                        log::info!(
+                            "{:?} Player[{:?}] @ {}: ",
+                            self.time,
+                            player_id.0,
+                            player_state.position
+                        );
+                        player_state.eat(*upgrade);
+                    }
+
+                    // TODO: placing Bombs into TP and have the Bomb Port would be funny
+                    // TODO: place Bomb into fire for immediate explosion?
+
+                    // GAME_RULE: Bombs can only be placed on empty Cells (after eating any powerups
+                    // there were)
+                    if Cell::Empty == *cell {
+                        player_state.current_bombs_placed += 1;
+                        *cell = Cell::Bomb {
+                            owner: player_id,
+                            expire: self.time + self.game.rules.bomb_time,
+                            // GAME_RULE: power is set AFTER eating powerups at cell
+                            power: player_state.power,
+                        };
+                        log::info!(
+                            "{:?} Player[{:?}] @ {} placed  {:?}",
+                            self.time,
+                            player_id.0,
+                            player_state.position,
+                            cell
+                        );
+                    }
+                } else {
+                    log::debug!(
+                        "{:?} Player[{:?}] @ {} not placing to {}",
+                        self.time,
+                        player_id.0,
+                        player_state.position,
+                        position
+                    );
+                    // TODO: log not placing at position (x or y too large)
+                }
+            } else {
+                log::debug!(
+                    "{:?} Player[{:?}] @ {} not placing",
+                    self.time,
+                    player_id.0,
+                    player_state.position,
+                );
+                // TODO: log not placing at position (x or y too small)
+            }
+        }
+        player_state.action = Action::Standing; // TODO: remove line so player is still
+                                                // placing and looks funnier?
+    }
+
     /// set a cell on fire.
     ///
-    /// consider_tp if target is a teleport, explode a random other teleport too.
+    /// `consider_tp` if target is a teleport, explode a random other teleport too.
     ///
     /// returns if the fire should continue further in that direction
     fn set_on_fire(&mut self, cell: CellPosition, owner: PlayerId, consider_tp: bool) -> bool {
@@ -957,6 +960,8 @@ impl GameState {
             Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => (true, 0, owner),
             Cell::Bomb { power, owner, .. } => {
                 log::info!("{cell}: destroying {owner:?}'s bomb");
+                self.player_states[owner.0].current_bombs_placed -= 1;
+
                 // GAME_RULE: owner of secondary Bomb takes the credit
                 (true, *power, *owner)
             }
@@ -978,12 +983,12 @@ impl GameState {
                             }
                         })
                         .collect();
-                    if !ports.is_empty() {
+                    if ports.is_empty() {
+                        log::info!("{cell}: destroying Teleport (no remote TP found)");
+                    } else {
                         let other = ports[random(self.time, cell.x, cell.y).idx() % ports.len()];
                         log::info!("{cell}: destroying Teleport, tunneling to {other}");
                         self.set_on_fire(other, owner, false);
-                    } else {
-                        log::info!("{cell}: destroying Teleport (no remote TP found)");
                     }
                 }
                 (true, self.game.rules.upgrade_explosion_power, owner)
@@ -1011,7 +1016,9 @@ impl GameState {
                         let y = y + dy * i;
                         if x >= 0 && y >= 0 {
                             let pos = CellPosition::new(x as u32, y as u32);
-                            if self.field.is_cell_in_field(pos) && !self.set_on_fire(pos, owner, true) {
+                            if self.field.is_cell_in_field(pos)
+                                && !self.set_on_fire(pos, owner, true)
+                            {
                                 break;
                             }
                         } else {
@@ -1131,7 +1138,7 @@ mod test {
         assert!(r != random(TimeStamp::default(), 0, 1));
     }
 
-    fn game() -> GameState {
+    fn game() -> State {
         let player1 = Player::new("test player 1".to_owned(), PlayerId(0), Position::new(0, 0));
         let local_player = player1.id;
         let rules = Rules::default();
@@ -1144,7 +1151,7 @@ mod test {
 
         let game = Rc::new(game);
 
-        let mut gs = GameState::new(game);
+        let mut gs = State::new(game);
         gs.player_states[0].current_bombs_placed = 42; // Hack, so bombs can explode without int
                                                        // underrun. If a test cares, it should set
                                                        // this correctly

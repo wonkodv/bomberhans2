@@ -2,6 +2,14 @@
 name = "bomberhans2"
 version = "0.1.0"
 edition = "2021"
+authors = [ "wonko" ]
+description = "a bad looking bomberman clone where dying doesn't stop you"
+license = "GPL-2.0"
+repository = "http://github.com/wonkodv/bomberhans2"
+keywords = [ "game", "bomberman" ]
+categories  = [ "games" ]
+readme = "readme.md"
+
 
 [dependencies]
 eframe = "0.20.1"
@@ -16,3 +24,31 @@ unsafe_code = "forbid"
 [lints.clippy]
 unusual_byte_groupings = "allow"
 zero_prefixed_literal = "allow"
+
+cargo = "warn"
+multiple_crate_versions = { level = "allow", priority=2} # 😢
+
+
+pedantic = "warn"
+cast_possible_wrap = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+
+
+clone_on_ref_ptr = "warn"
+format_push_string = "warn"
+get_unwrap = "warn"
+pattern_type_mismatch = "warn"
+redundant_type_annotations = "warn"
+ref_patterns = "warn"
+same_name_method = "warn"
+self_named_module_files = "warn"
+str_to_string= "warn"
+string_to_string = "warn"
+try_err = "warn"
+unneeded_field_pattern="warn"
+unseparated_literal_suffix  = "warn"
+verbose_file_reads = "warn"
+
+
+shadow_unrelated = "warn" # ?

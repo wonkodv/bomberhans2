@@ -17,10 +17,10 @@ use crate::game::Cell;
 use crate::game::CellPosition;
 use crate::game::Direction;
 use crate::game::Game;
-use crate::game::GameState;
 use crate::game::PlayerState;
 use crate::game::Position;
 use crate::game::Rules;
+use crate::game::State;
 use crate::game::TimeStamp;
 use crate::game::TICKS_PER_SECOND;
 
@@ -28,7 +28,7 @@ const PIXEL_PER_CELL: f32 = 16.0;
 
 enum Step {
     Initial,
-    Game(GameState),
+    Game(State),
     GameOver(String),
 }
 
@@ -65,7 +65,7 @@ pub fn gui() {
                 last_frame: Instant::now(),
             })
         }),
-    )
+    );
 }
 
 struct TextureManager {
@@ -102,7 +102,7 @@ impl TextureManager {
                 crate::game::Direction::East => "walking_e",
             },
         };
-        self.get_texture(&format!("hans_{}{}", s, odd))
+        self.get_texture(&format!("hans_{s}{odd}"))
     }
 }
 
@@ -143,7 +143,7 @@ impl MyApp {
         if ui.button("Start local Game").clicked() {
             let game = Game::new_local_game(self.game_name.clone(), self.rules.clone());
             let game = Rc::new(game);
-            let game_state = GameState::new(game);
+            let game_state = State::new(game);
             self.step = Step::Game(game_state);
         }
     }
@@ -250,6 +250,7 @@ fn load_image_from_memory(image_data: &[u8]) -> egui::ColorImage {
 
 fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
     let mut map = HashMap::new();
+    // TODO: make this a fn?
     macro_rules! load {
         ($x:expr) => {
             map.insert(
@@ -270,8 +271,8 @@ fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
     load!("cell_teleport");
     load!("cell_tomb_stone");
     load!("cell_upgrade_speed");
-    load!("cell_upgrade_speed");
-    load!("cell_upgrade_speed");
+    load!("cell_upgrade_bomb");
+    load!("cell_upgrade_power");
     load!("cell_wall");
     load!("cell_wood");
     load!("cell_wood_burning");
