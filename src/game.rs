@@ -1,9 +1,9 @@
 use crate::utils::Idx;
-use log::*;
-use std::cmp::max;
-use std::cmp::min;
+
+
+
 use std::collections::HashSet;
-use std::error::Error;
+
 use std::fmt;
 use std::ops::Index;
 use std::ops::IndexMut;
@@ -1011,10 +1011,8 @@ impl GameState {
                         let y = y + dy * i;
                         if x >= 0 && y >= 0 {
                             let pos = CellPosition::new(x as u32, y as u32);
-                            if self.field.is_cell_in_field(pos) {
-                                if !self.set_on_fire(pos, owner, true) {
-                                    break;
-                                }
+                            if self.field.is_cell_in_field(pos) && !self.set_on_fire(pos, owner, true) {
+                                break;
                             }
                         } else {
                             break;
@@ -1298,11 +1296,11 @@ mod test {
             if !eq {
                 print!(
                     "Expected:\n    {}",
-                    actual.string_grid().replace("\n", "\n    ")
+                    actual.string_grid().replace('\n', "\n    ")
                 );
                 print!(
                     "Actual:\n    {}",
-                    actual.string_grid().replace("\n", "\n    ")
+                    actual.string_grid().replace('\n', "\n    ")
                 );
             }
             eq
