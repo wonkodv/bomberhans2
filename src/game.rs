@@ -50,9 +50,9 @@ impl Duration {
         Self { ticks }
     }
 
-    pub fn from_seconds(seconds: u32) -> Self {
+    pub fn from_seconds(seconds: f32) -> Self {
         Self {
-            ticks: seconds * TICKS_PER_SECOND,
+            ticks: (seconds * TICKS_PER_SECOND as f32) as u32,
         }
     }
     pub fn ticks(self) -> u32 {
@@ -161,7 +161,7 @@ pub struct Ratios {
     speed: u8,
     bombs: u8,
     teleport: u8,
-    wood: u8,
+    wall: u8,
     clear: u8,
 }
 
@@ -172,19 +172,19 @@ impl Default for Ratios {
 }
 
 impl Ratios {
-    pub fn new(power: u8, speed: u8, bombs: u8, teleport: u8, wood: u8, clear: u8) -> Self {
+    pub fn new(power: u8, speed: u8, bombs: u8, teleport: u8, wall: u8, clear: u8) -> Self {
         Self {
             power,
             speed,
             bombs,
             teleport,
-            wood,
+            wall,
             clear,
         }
     }
 
     fn generate(&self, random: u32) -> Cell {
-        let sum: u8 = self.power + self.speed + self.bombs + self.teleport + self.wood + self.clear;
+        let sum: u8 = self.power + self.speed + self.bombs + self.teleport + self.wall + self.clear;
 
         let mut random: u8 = (random % (u32::from(sum)))
             .try_into()
@@ -210,10 +210,10 @@ impl Ratios {
         }
         random -= self.teleport;
 
-        if random < self.wood {
-            return Cell::Wood;
+        if random < self.wall {
+            return Cell::Wall;
         }
-        random -= self.wood;
+        random -= self.wall;
 
         assert!(random < self.clear);
         Cell::Empty
@@ -266,13 +266,13 @@ impl Default for Rules {
             players: 4,
             ratios: Ratios::default(),
             bomb_offset: 30,
-            bomb_time: Duration::from_seconds(3),
+            bomb_time: Duration::from_seconds(2.0),
             speed_multiplyer: 10,
             speed_offset: 42,
             bomb_walking_chance: 70,
             upgrade_explosion_power: 1,
-            wood_burn_time: Duration::from_seconds(3),
-            fire_burn_time: Duration::from_seconds(3),
+            wood_burn_time: Duration::from_seconds(1.0),
+            fire_burn_time: Duration::from_seconds(0.5),
         }
     }
 }
@@ -840,7 +840,9 @@ impl State {
                         let targets: Vec<(CellPosition, &Cell)> = self
                             .field
                             .iter()
-                            .filter(|(pos, cell)| *cell == Cell::Teleport && pos != cell_position)
+                            .filter(|&(target_position, target_cell)| {
+                                *target_cell == Cell::Teleport && target_position != cell_position
+                            })
                             .collect();
                         if targets.len() > 1 {
                             let target = targets[random(self.time, position.x, position.y)
@@ -888,14 +890,14 @@ impl State {
 
                     // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
                     // if you have enough bombs to place
-                    if let Cell::Upgrade(upgrade) = cell {
+                    if let Cell::Upgrade(upgrade) = *cell {
                         log::info!(
                             "{:?} Player[{:?}] @ {}: ",
                             self.time,
                             player_id.0,
                             player_state.position
                         );
-                        player_state.eat(*upgrade);
+                        player_state.eat(upgrade);
                     }
 
                     // TODO: placing Bombs into TP and have the Bomb Port would be funny
@@ -955,15 +957,19 @@ impl State {
             }
         }
 
-        let (explodes, power, owner) = match &self.field[cell] {
+        let (explodes, power, owner) = match self.field[cell] {
             // TODO: Tombstone Explodes based on players schinken?
             Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => (true, 0, owner),
-            Cell::Bomb { power, owner, .. } => {
+            Cell::Bomb {
+                power,
+                owner: bomb_owner,
+                ..
+            } => {
                 log::info!("{cell}: destroying {owner:?}'s bomb");
-                self.player_states[owner.0].current_bombs_placed -= 1;
+                self.player_states[bomb_owner.0].current_bombs_placed -= 1;
 
                 // GAME_RULE: owner of secondary Bomb takes the credit
-                (true, *power, *owner)
+                (true, power, bomb_owner)
             }
             Cell::Upgrade(upgrade) => {
                 log::info!("{cell}: destroying {upgrade:?}");
@@ -1036,28 +1042,22 @@ impl State {
 
         for cell_idx in self.field.iter_indices() {
             let cell = &mut self.field[cell_idx];
-            match cell {
-                Cell::Bomb {
-                    owner,
-                    power,
-                    expire,
-                } => {
-                    assert!(*expire >= self.time);
-                    if *expire == self.time {
-                        let owner = *owner;
+            match *cell {
+                Cell::Bomb { owner, expire, .. } => {
+                    assert!(expire >= self.time);
+                    if expire == self.time {
                         self.set_on_fire(cell_idx, owner, true);
-                        self.player_states[owner.0].current_bombs_placed -= 1;
                     }
                 }
-                Cell::Fire { owner, expire } => {
-                    assert!(*expire >= self.time);
-                    if *expire == self.time {
+                Cell::Fire { expire, .. } => {
+                    assert!(expire >= self.time);
+                    if expire == self.time {
                         *cell = Cell::Empty;
                     }
                 }
                 Cell::WoodBurning { expire } => {
-                    assert!(*expire >= self.time);
-                    if *expire == self.time {
+                    assert!(expire >= self.time);
+                    if expire == self.time {
                         let r = random(self.time, cell_idx.x, cell_idx.y);
                         *cell = self.game.rules.ratios.generate(r);
                     }

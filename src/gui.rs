@@ -126,7 +126,7 @@ impl MyApp {
     }
 
     fn update_initial(&mut self, ui: &mut egui::Ui) {
-        if let Step::GameOver(s) = &self.step {
+        if let Step::GameOver(ref s) = self.step {
             ui.label(s);
         }
         ui.add(
@@ -140,7 +140,13 @@ impl MyApp {
                 .clamp_to_range(true),
         );
         ui.add(egui::Slider::new(&mut self.rules.players, 1..=4).text("Players"));
-        if ui.button("Start local Game").clicked() {
+        let button = ui.button("Start local Game");
+        let mut memory = ui.memory();
+        if memory.focus().is_none() {
+            memory.request_focus(button.id); // TODO: this flickers
+        }
+
+        if button.clicked() {
             let game = Game::new_local_game(self.game_name.clone(), self.rules.clone());
             let game = Rc::new(game);
             let game_state = State::new(game);
@@ -150,7 +156,7 @@ impl MyApp {
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
-        let Step::Game(game_state) = &mut self.step else {
+        let Step::Game(ref mut game_state) = self.step else {
             unreachable!();
         };
 
@@ -165,20 +171,22 @@ impl MyApp {
             game_state.update();
         }
 
-        if ui.ctx().input_mut().key_pressed(egui::Key::Space) {
+        if ui.ctx().input_mut().key_down(egui::Key::Space) {
             game_state.set_player_action(game_state.game.local_player, Action::Placing);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::W) {
+        } else if ui.ctx().input_mut().key_down(egui::Key::W) {
             game_state.set_player_direction(game_state.game.local_player, Direction::North);
             game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
+        } else if ui.ctx().input_mut().key_down(egui::Key::S) {
             game_state.set_player_direction(game_state.game.local_player, Direction::South);
             game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
+        } else if ui.ctx().input_mut().key_down(egui::Key::A) {
             game_state.set_player_direction(game_state.game.local_player, Direction::West);
             game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::D) {
+        } else if ui.ctx().input_mut().key_down(egui::Key::D) {
             game_state.set_player_direction(game_state.game.local_player, Direction::East);
             game_state.set_player_action(game_state.game.local_player, Action::Walking);
+        } else {
+            game_state.set_player_action(game_state.game.local_player, Action::Standing);
         }
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
