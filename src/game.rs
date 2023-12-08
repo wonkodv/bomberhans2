@@ -25,7 +25,7 @@ impl TimeStamp {
 
 impl fmt::Debug for TimeStamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "@{}ticks", self.inner)
+        write!(f, "⌚{}", self.inner)
     }
 }
 
@@ -59,16 +59,23 @@ impl Duration {
         self.ticks
     }
 }
+
 impl fmt::Debug for Duration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}ticks", self.ticks)
+        write!(f, "⏳{}", self.ticks)
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct PlayerId(usize);
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+impl fmt::Debug for PlayerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Player{}", self.0)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
 pub enum Direction {
     North,
     West,
@@ -76,8 +83,19 @@ pub enum Direction {
     East,
 }
 
+impl fmt::Debug for Direction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Direction::North => write!(f, "⬆️"),
+            Direction::West => write!(f, "⬅️"),
+            Direction::South => write!(f, "⬇️"),
+            Direction::East => write!(f, "➡️"),
+        }
+    }
+}
+
 /// Index of a cell
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct CellPosition {
     pub x: u32,
     pub y: u32,
@@ -100,20 +118,20 @@ impl CellPosition {
     }
 }
 
-impl fmt::Display for CellPosition {
+impl fmt::Debug for CellPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:02}/{:02})", self.x, self.y)
     }
 }
 
 /// Player positions
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Position {
     pub x: u32,
     pub y: u32,
 }
 
-impl fmt::Display for Position {
+impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{:02}/{:02}]", self.x, self.y)
     }
@@ -265,11 +283,11 @@ impl Default for Rules {
             height: 13,
             players: 4,
             ratios: Ratios::default(),
-            bomb_offset: 30,
+            bomb_offset: 35,
             bomb_time: Duration::from_seconds(2.0),
-            speed_multiplyer: 10,
-            speed_offset: 42,
-            bomb_walking_chance: 70,
+            speed_multiplyer: 2,
+            speed_offset: 5,
+            bomb_walking_chance: 80,
             upgrade_explosion_power: 1,
             wood_burn_time: Duration::from_seconds(1.0),
             fire_burn_time: Duration::from_seconds(0.5),
@@ -284,11 +302,8 @@ impl Rules {
     ///
     /// Speed of input variables is Cells/100s
     fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
-        return 5;
-        // TODO: I'm too tired to get this right
-        (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer))
+        (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer)) * TICKS_PER_SECOND
             / Position::PLAYER_POSITION_ACCURACY
-            * TICKS_PER_SECOND
     }
 }
 
@@ -302,11 +317,21 @@ fn random(time: TimeStamp, r1: u32, r2: u32) -> u32 {
     x
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Upgrade {
     Speed,
     Power,
     Bombs,
+}
+
+impl fmt::Debug for Upgrade {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Upgrade::Speed => write!(f, "👟"),
+            Upgrade::Power => write!(f, "💪"),
+            Upgrade::Bombs => write!(f, "💣"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -740,24 +765,24 @@ impl State {
     }
 
     pub fn set_player_action(&mut self, player_id: PlayerId, action: Action) {
-        log::info!(
-            "{:?} Player[{:?}].action = {:?}",
-            self.time,
-            player_id.0,
-            action
-        );
         let player_state = &mut self.player_states[player_id.0];
+
+        if player_state.action != action {
+            log::debug!("{:?} {:?}.action := {:?}", self.time, player_id, action);
+        }
         player_state.action = action;
     }
 
     pub fn set_player_direction(&mut self, player_id: PlayerId, direction: Direction) {
-        log::info!(
-            "{:?} Player[{:?}].direction = {:?}",
-            self.time,
-            player_id.0,
-            direction
-        );
         let player_state = &mut self.player_states[player_id.0];
+        if player_state.direction != direction {
+            log::info!(
+                "{:?} {:?}.direction := {:?}",
+                self.time,
+                player_id,
+                direction
+            );
+        }
         player_state.direction = direction;
     }
 }
@@ -796,10 +821,10 @@ impl State {
             let cell_position = position.as_cell_pos();
             if self.field.is_cell_in_field(cell_position) {
                 let cell = &self.field[cell_position];
-                log::info!(
-                    "{:?} Player[{:?}] @ {} walking to {} == {} ({:?}) ",
+                log::debug!(
+                    "{:?} {:?} @ {:?} walking to {:?} == {:?} ({:?}) ",
                     self.time,
-                    player_id.0,
+                    player_id,
                     player_state.position,
                     position,
                     cell_position,
@@ -819,22 +844,27 @@ impl State {
                         }
                     }
                     Cell::Fire { owner, .. } => {
-                        log::info!(
-                            "{:?} Player[{:?}] @ {} suicided",
-                            self.time,
-                            player_id.0,
-                            player_state.position,
-                        );
                         // GAME_RULE: walking into fire counts as kill by fire owner
                         // TODO: seperate counter?
                         player_state.die(owner, player.start_position);
                         self.player_states[owner.0].score(player_id);
                         self.field[cell_position] = Cell::TombStone(player_id);
+
+                        log::info!("{:?} {:?} @ {:?} suicided", self.time, player_id, position,);
                     }
                     Cell::Upgrade(upgrade) => {
                         player_state.move_(position);
                         player_state.eat(upgrade);
                         self.field[cell_position] = Cell::Empty;
+
+                        log::info!(
+                            "{:?} {:?} @ {:?} ate {:?}, {:?}",
+                            self.time,
+                            player_id,
+                            player_state.position,
+                            upgrade,
+                            player_state
+                        );
                     }
                     Cell::Teleport => {
                         let targets: Vec<(CellPosition, &Cell)> = self
@@ -844,7 +874,7 @@ impl State {
                                 *target_cell == Cell::Teleport && target_position != cell_position
                             })
                             .collect();
-                        if targets.len() > 1 {
+                        if targets.len() >= 1 {
                             let target = targets[random(self.time, position.x, position.y)
                                 as usize
                                 % targets.len()];
@@ -857,8 +887,22 @@ impl State {
                             debug_assert_eq!(self.field[to], Cell::Teleport);
                             self.field[cell_position] = Cell::Empty;
                             self.field[to] = Cell::Empty;
+                            log::info!(
+                                "{:?} {:?} @ {:?} ported to {:?}",
+                                self.time,
+                                player_id,
+                                cell_position,
+                                to
+                            );
                         } else {
-                            player_state.move_(position);
+                            log::info!(
+                                "{:?} {:?} @ {:?} can not walk onto Teleport, it is not connected",
+                                self.time,
+                                player_id,
+                                cell_position,
+                            );
+                            // GAME_RULE: you can not walk onto an unconnected TP :P
+                            // player_state.move_(position);
                         }
                     }
                     Cell::Wall | Cell::Wood | Cell::WoodBurning { .. } => {} /* no walking through walls */
@@ -873,9 +917,9 @@ impl State {
         // GAME RULE: can not place more bombs than you have bomb powerups
         if player_state.current_bombs_placed >= player_state.bombs {
             log::info!(
-                "{:?} Player[{:?}] out of bombs {}",
+                "{:?} {:?} out of bombs {:?}",
                 self.time,
-                player_id.0,
+                player_id,
                 player_state.bombs
             );
         } else {
@@ -889,13 +933,15 @@ impl State {
                     let cell = &mut self.field[cell_position];
 
                     // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
-                    // if you have enough bombs to place
+                    // if you have enough bombs to place, but BEFORE placing the bomb (bomb count
+                    // is not considered, power is)
                     if let Cell::Upgrade(upgrade) = *cell {
                         log::info!(
-                            "{:?} Player[{:?}] @ {}: ",
+                            "{:?} {:?} @ {:?}: ate {:?} while placing",
                             self.time,
-                            player_id.0,
-                            player_state.position
+                            player_id,
+                            player_state.position,
+                            upgrade,
                         );
                         player_state.eat(upgrade);
                     }
@@ -914,18 +960,18 @@ impl State {
                             power: player_state.power,
                         };
                         log::info!(
-                            "{:?} Player[{:?}] @ {} placed  {:?}",
+                            "{:?} {:?} @ {:?} placed  {:?}",
                             self.time,
-                            player_id.0,
+                            player_id,
                             player_state.position,
                             cell
                         );
                     }
                 } else {
                     log::debug!(
-                        "{:?} Player[{:?}] @ {} not placing to {}",
+                        "{:?} {:?} @ {:?} not placing to {:?}",
                         self.time,
-                        player_id.0,
+                        player_id,
                         player_state.position,
                         position
                     );
@@ -933,9 +979,9 @@ impl State {
                 }
             } else {
                 log::debug!(
-                    "{:?} Player[{:?}] @ {} not placing",
+                    "{:?} {:?} @ {:?} not placing",
                     self.time,
-                    player_id.0,
+                    player_id,
                     player_state.position,
                 );
                 // TODO: log not placing at position (x or y too small)
@@ -965,14 +1011,14 @@ impl State {
                 owner: bomb_owner,
                 ..
             } => {
-                log::info!("{cell}: destroying {owner:?}'s bomb");
+                log::info!("{cell:?}: destroying {owner:?}'s bomb");
                 self.player_states[bomb_owner.0].current_bombs_placed -= 1;
 
                 // GAME_RULE: owner of secondary Bomb takes the credit
                 (true, power, bomb_owner)
             }
             Cell::Upgrade(upgrade) => {
-                log::info!("{cell}: destroying {upgrade:?}");
+                log::info!("{cell:?}: destroying {upgrade:?}");
 
                 (true, self.game.rules.upgrade_explosion_power, owner)
             }
@@ -990,10 +1036,10 @@ impl State {
                         })
                         .collect();
                     if ports.is_empty() {
-                        log::info!("{cell}: destroying Teleport (no remote TP found)");
+                        log::info!("{cell:?}: destroying Teleport (no remote TP found)");
                     } else {
                         let other = ports[random(self.time, cell.x, cell.y).idx() % ports.len()];
-                        log::info!("{cell}: destroying Teleport, tunneling to {other}");
+                        log::info!("{cell:?}: destroying Teleport, tunneling to {other:?}");
                         self.set_on_fire(other, owner, false);
                     }
                 }
@@ -1003,7 +1049,7 @@ impl State {
             Cell::Wood => {
                 let expire = self.time + self.game.rules.wood_burn_time;
                 self.field[cell] = Cell::WoodBurning { expire };
-                log::info!("{cell}: setting wall on fire until {expire:?}");
+                log::info!("{cell:?}: setting wall on fire until {expire:?}");
                 (false, 0, owner)
             }
         };

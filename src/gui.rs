@@ -63,6 +63,7 @@ pub fn gui() {
                 player_name: "New Player".into(),
                 textures: None,
                 last_frame: Instant::now(),
+                walking_directions: Vec::new(),
             })
         }),
     );
@@ -111,6 +112,8 @@ struct MyApp {
     rules: Rules,
     game_name: String,
     player_name: String,
+
+    walking_directions: Vec<Direction>,
 
     textures: Option<Rc<TextureManager>>,
     last_frame: Instant,
@@ -171,22 +174,64 @@ impl MyApp {
             game_state.update();
         }
 
+        if ui.ctx().input_mut().key_pressed(egui::Key::W) {
+            if !self.walking_directions.contains(&Direction::North) {
+                self.walking_directions.push(Direction::North);
+            }
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
+            if !self.walking_directions.contains(&Direction::South) {
+                self.walking_directions.push(Direction::South);
+            }
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
+            if !self.walking_directions.contains(&Direction::West) {
+                self.walking_directions.push(Direction::West);
+            }
+        } else if ui.ctx().input_mut().key_pressed(egui::Key::D) {
+            if !self.walking_directions.contains(&Direction::East) {
+                self.walking_directions.push(Direction::East);
+            }
+        }
+
+        if ui.ctx().input_mut().key_released(egui::Key::W) {
+            self.walking_directions.remove(
+                self.walking_directions
+                    .iter()
+                    .position(|x| *x == Direction::North)
+                    .unwrap(),
+            );
+        } else if ui.ctx().input_mut().key_released(egui::Key::S) {
+            self.walking_directions.remove(
+                self.walking_directions
+                    .iter()
+                    .position(|x| *x == Direction::South)
+                    .unwrap(),
+            );
+        } else if ui.ctx().input_mut().key_released(egui::Key::A) {
+            self.walking_directions.remove(
+                self.walking_directions
+                    .iter()
+                    .position(|x| *x == Direction::West)
+                    .unwrap(),
+            );
+        } else if ui.ctx().input_mut().key_released(egui::Key::D) {
+            self.walking_directions.remove(
+                self.walking_directions
+                    .iter()
+                    .position(|x| *x == Direction::East)
+                    .unwrap(),
+            );
+        }
+
         if ui.ctx().input_mut().key_down(egui::Key::Space) {
             game_state.set_player_action(game_state.game.local_player, Action::Placing);
-        } else if ui.ctx().input_mut().key_down(egui::Key::W) {
-            game_state.set_player_direction(game_state.game.local_player, Direction::North);
-            game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else if ui.ctx().input_mut().key_down(egui::Key::S) {
-            game_state.set_player_direction(game_state.game.local_player, Direction::South);
-            game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else if ui.ctx().input_mut().key_down(egui::Key::A) {
-            game_state.set_player_direction(game_state.game.local_player, Direction::West);
-            game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else if ui.ctx().input_mut().key_down(egui::Key::D) {
-            game_state.set_player_direction(game_state.game.local_player, Direction::East);
-            game_state.set_player_action(game_state.game.local_player, Action::Walking);
         } else {
-            game_state.set_player_action(game_state.game.local_player, Action::Standing);
+            if let Some(dir) = self.walking_directions.last() {
+                game_state.set_player_direction(game_state.game.local_player, *dir);
+                game_state.set_player_action(game_state.game.local_player, Action::Walking);
+            } else {
+                game_state.set_player_direction(game_state.game.local_player, Direction::South);
+                game_state.set_player_action(game_state.game.local_player, Action::Standing);
+            }
         }
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
