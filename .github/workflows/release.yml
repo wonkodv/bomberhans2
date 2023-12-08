@@ -1,0 +1,32 @@
+name: Release
+on:
+  push:
+    tags:
+    - 'v.*'
+
+jobs:
+  build:
+    name: Build and Publish
+    strategy:
+      matrix:
+        build:
+          - os: ubuntu-latest
+            artefact: bomberhans
+          - os: windows-latest
+            artifact: bomberhans.exe
+        toolchain:
+          - stable
+
+    runs-on: ${{ matrix.build.os }}
+
+    steps:
+      - uses: actions/checkout@v2
+      - run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - run:  cargo build --release
+      - name: Strip release binary (linux and macos)
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: executable
+          path: target/release/${{ matrix.build.artifact }}
+
