@@ -874,7 +874,16 @@ impl State {
                                 *target_cell == Cell::Teleport && target_position != cell_position
                             })
                             .collect();
-                        if targets.len() >= 1 {
+                        if targets.is_empty() {
+                            log::info!(
+                                "{:?} {:?} @ {:?} can not walk onto Teleport, it is not connected",
+                                self.time,
+                                player_id,
+                                cell_position,
+                            );
+                            // GAME_RULE: you can not walk onto an unconnected TP :P
+                            // player_state.move_(position);
+                        } else {
                             let target = targets[random(self.time, position.x, position.y)
                                 as usize
                                 % targets.len()];
@@ -894,15 +903,6 @@ impl State {
                                 cell_position,
                                 to
                             );
-                        } else {
-                            log::info!(
-                                "{:?} {:?} @ {:?} can not walk onto Teleport, it is not connected",
-                                self.time,
-                                player_id,
-                                cell_position,
-                            );
-                            // GAME_RULE: you can not walk onto an unconnected TP :P
-                            // player_state.move_(position);
                         }
                     }
                     Cell::Wall | Cell::Wood | Cell::WoodBurning { .. } => {} /* no walking through walls */

@@ -190,6 +190,8 @@ impl MyApp {
             if !self.walking_directions.contains(&Direction::East) {
                 self.walking_directions.push(Direction::East);
             }
+        } else {
+              //
         }
 
         if ui.ctx().input_mut().key_released(egui::Key::W) {
@@ -224,14 +226,12 @@ impl MyApp {
 
         if ui.ctx().input_mut().key_down(egui::Key::Space) {
             game_state.set_player_action(game_state.game.local_player, Action::Placing);
+        } else if let Some(dir) = self.walking_directions.last() {
+            game_state.set_player_direction(game_state.game.local_player, *dir);
+            game_state.set_player_action(game_state.game.local_player, Action::Walking);
         } else {
-            if let Some(dir) = self.walking_directions.last() {
-                game_state.set_player_direction(game_state.game.local_player, *dir);
-                game_state.set_player_action(game_state.game.local_player, Action::Walking);
-            } else {
-                game_state.set_player_direction(game_state.game.local_player, Direction::South);
-                game_state.set_player_action(game_state.game.local_player, Action::Standing);
-            }
+            game_state.set_player_direction(game_state.game.local_player, Direction::South);
+            game_state.set_player_action(game_state.game.local_player, Action::Standing);
         }
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
