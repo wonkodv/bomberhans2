@@ -1,6 +1,13 @@
 Bomberhans
 ==========
 
+TODOS
+------
+
+*   Make hans walk in the middle of the isle, scooting around corners like BH1
+*   Bomb Placing should not interrupt walking. Bombs just appear.
+*   apply Bomb offset only while walking. use State::Placing only from Standing
+
 
 Client Server synchronization
 -----------------------------

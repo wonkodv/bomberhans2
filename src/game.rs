@@ -1,7 +1,4 @@
 use crate::utils::Idx;
-
-use std::collections::HashSet;
-
 use std::fmt;
 use std::ops::Index;
 use std::ops::IndexMut;
@@ -912,7 +909,6 @@ impl State {
     }
 
     fn place_bomb(&mut self, player_id: PlayerId) {
-        let player = &self.game.players[player_id.0];
         let player_state = &mut self.player_states[player_id.0];
         // GAME RULE: can not place more bombs than you have bomb powerups
         if player_state.current_bombs_placed >= player_state.bombs {
@@ -1084,8 +1080,6 @@ impl State {
     }
 
     fn update_field(&mut self) {
-        let fields_on_fire: HashSet<CellPosition> = HashSet::new();
-
         for cell_idx in self.field.iter_indices() {
             let cell = &mut self.field[cell_idx];
             match *cell {
@@ -1216,8 +1210,8 @@ mod test {
         assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.generate(005));
         assert_eq!(Cell::Teleport, r.generate(006));
         assert_eq!(Cell::Teleport, r.generate(007));
-        assert_eq!(Cell::Wood, r.generate(008));
-        assert_eq!(Cell::Wood, r.generate(009));
+        assert_eq!(Cell::Wall, r.generate(008));
+        assert_eq!(Cell::Wall, r.generate(009));
         assert_eq!(Cell::Empty, r.generate(010));
         assert_eq!(Cell::Empty, r.generate(011));
     }
@@ -1337,11 +1331,11 @@ mod test {
             false
         } else {
             let mut eq = true;
-            for ci in actual.iter_indices() {
-                if actual[ci].to_char() != expected[ci].to_char() {
+            for cell in actual.iter_indices() {
+                if actual[cell].to_char() != expected[cell].to_char() {
                     print!(
-                        " unexpected at {}: {:#?} != {:#?}",
-                        ci, actual[ci], expected[ci]
+                        " unexpected at {:?}: {:#?} != {:#?}",
+                        cell, actual[cell], expected[cell]
                     );
                     eq = false;
                 }

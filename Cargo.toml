@@ -20,6 +20,9 @@ log = "0.4.20"
 
 [lints.rust]
 unsafe_code = "forbid"
+dead_code          = "allow" # TODO
+unused_variables   = "allow" # TODO
+unreachable_code   = "allow" # TODO
 
 [lints.clippy]
 unusual_byte_groupings = "allow"
