@@ -1,9 +1,9 @@
 [package]
 name = "bomberhans2"
-version = "0.1.0"
+version = "0.2.8"
 edition = "2021"
 authors = [ "wonko" ]
-description = "a bad looking bomberman clone where dying doesn't stop you"
+description = "A bad looking bomberman clone where dying doesn't stop you"
 license = "GPL-2.0"
 repository = "http://github.com/wonkodv/bomberhans2"
 keywords = [ "game", "bomberman" ]
