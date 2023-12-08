@@ -16,5 +16,6 @@ fn main() {
             )
         })
         .init();
+    log::info!(concat!("Running Bomberhans ", env!("VERSION")));
     gui::gui();
 }

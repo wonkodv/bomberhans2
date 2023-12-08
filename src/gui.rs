@@ -53,7 +53,7 @@ pub fn gui() {
         ..Default::default()
     };
     eframe::run_native(
-        "BomberHans",
+        concat!("Bomberhans ", env!("VERSION")),
         options,
         Box::new(|_cc| {
             Box::new(MyApp {
