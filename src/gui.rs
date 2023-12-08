@@ -170,7 +170,7 @@ impl MyApp {
         ui.ctx()
             .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
 
-        for i in 0..ticks {
+        for _ in 0..ticks {
             game_state.update();
         }
 
@@ -191,37 +191,41 @@ impl MyApp {
                 self.walking_directions.push(Direction::East);
             }
         } else {
-              //
+            //
         }
 
         if ui.ctx().input_mut().key_released(egui::Key::W) {
-            self.walking_directions.remove(
-                self.walking_directions
-                    .iter()
-                    .position(|x| *x == Direction::North)
-                    .unwrap(),
-            );
+            if let Some(idx) = self
+                .walking_directions
+                .iter()
+                .position(|x| *x == Direction::North)
+            {
+                self.walking_directions.remove(idx);
+            }
         } else if ui.ctx().input_mut().key_released(egui::Key::S) {
-            self.walking_directions.remove(
-                self.walking_directions
-                    .iter()
-                    .position(|x| *x == Direction::South)
-                    .unwrap(),
-            );
+            if let Some(idx) = self
+                .walking_directions
+                .iter()
+                .position(|x| *x == Direction::South)
+            {
+                self.walking_directions.remove(idx);
+            }
         } else if ui.ctx().input_mut().key_released(egui::Key::A) {
-            self.walking_directions.remove(
-                self.walking_directions
-                    .iter()
-                    .position(|x| *x == Direction::West)
-                    .unwrap(),
-            );
+            if let Some(idx) = self
+                .walking_directions
+                .iter()
+                .position(|x| *x == Direction::West)
+            {
+                self.walking_directions.remove(idx);
+            }
         } else if ui.ctx().input_mut().key_released(egui::Key::D) {
-            self.walking_directions.remove(
-                self.walking_directions
-                    .iter()
-                    .position(|x| *x == Direction::East)
-                    .unwrap(),
-            );
+            if let Some(idx) = self
+                .walking_directions
+                .iter()
+                .position(|x| *x == Direction::East)
+            {
+                self.walking_directions.remove(idx);
+            }
         }
 
         if ui.ctx().input_mut().key_down(egui::Key::Space) {
@@ -293,58 +297,67 @@ impl eframe::App for MyApp {
     }
 }
 
-fn load_image_from_memory(image_data: &[u8]) -> egui::ColorImage {
+/// Create an image from byte slice
+///
+/// `image_data` the image bytes (e.g. a Bitmap)
+/// `transparent` turn all pixels with the same color as the top left corenr transparent
+fn load_image_from_memory(image_data: &[u8], transparent: bool) -> egui::ColorImage {
     let image = image::load_from_memory(image_data).expect("resources can be loaded");
     let size = [image.width() as _, image.height() as _];
-    let image_buffer = image.to_rgba8();
+    let mut image_buffer = image.to_rgba8();
+    let top_left = image_buffer[(0, 0)];
+    if transparent {
+        for pixel in image_buffer.pixels_mut() {
+            if *pixel == top_left {
+                pixel[3] = 0;
+            }
+        }
+    }
     let pixels = image_buffer.as_flat_samples();
     egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
 }
 
 fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
     let mut map = HashMap::new();
-    // TODO: make this a fn?
+
     macro_rules! load {
-        ($x:expr) => {
+        ($x:expr, $t:expr) => {
             map.insert(
                 $x,
                 ctx.load_texture(
                     $x,
-                    load_image_from_memory(include_bytes!(concat!("../images/", $x, ".bmp"))),
+                    load_image_from_memory(include_bytes!(concat!("../images/", $x, ".bmp")), $t),
                     egui::TextureOptions::default(),
                 ),
             )
         };
     }
 
-    load!("cell_bomb");
-    load!("cell_empty");
-    load!("cell_fire");
-    load!("cell_start_point");
-    load!("cell_teleport");
-    load!("cell_tomb_stone");
-    load!("cell_upgrade_speed");
-    load!("cell_upgrade_bomb");
-    load!("cell_upgrade_power");
-    load!("cell_wall");
-    load!("cell_wood");
-    load!("cell_wood_burning");
+    load!("cell_bomb", false);
+    load!("cell_empty", false);
+    load!("cell_fire", false);
+    load!("cell_start_point", false);
+    load!("cell_teleport", false);
+    load!("cell_tomb_stone", false);
+    load!("cell_upgrade_speed", false);
+    load!("cell_upgrade_bomb", false);
+    load!("cell_upgrade_power", false);
+    load!("cell_wall", false);
+    load!("cell_wood", false);
+    load!("cell_wood_burning", false);
 
-    load!("hans_placing");
-    load!("hans_placing2");
-    load!("hans_standing");
-    load!("hans_standing2");
-    load!("hans_walking_e2");
-    load!("hans_walking_e");
-    load!("hans_walking_n2");
-    load!("hans_walking_n");
-    load!("hans_walking_s2");
-    load!("hans_walking_s");
-    load!("hans_walking_w2");
-    load!("hans_walking_w");
-
-    load!("hans_stunned"); // TODO: ?
-    load!("hans_respawned"); // TODO: ?
+    load!("hans_placing", true);
+    load!("hans_placing2", true);
+    load!("hans_standing", true);
+    load!("hans_standing2", true);
+    load!("hans_walking_e2", true);
+    load!("hans_walking_e", true);
+    load!("hans_walking_n2", true);
+    load!("hans_walking_n", true);
+    load!("hans_walking_s2", true);
+    load!("hans_walking_s", true);
+    load!("hans_walking_w2", true);
+    load!("hans_walking_w", true);
 
     map.insert(
         "background",
