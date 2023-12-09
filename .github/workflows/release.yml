@@ -22,19 +22,23 @@ jobs:
       - uses: actions/checkout@v3
       - name: Get Tag Version
         id: version
+        shell: bash
         run: |
-          echo "VERSION=${GITHUB_REF#refs/tags/} " >> "$GITHUB_OUTPUT"
+          echo "VERSION=${GITHUB_REF#refs/tags/}" | tee -a "$GITHUB_OUTPUT"
       - run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
       - run:  cargo build --release --verbose
       - name:  Gather Artifacts
+        shell: bash
         run: |
-          {
-            mkdir -p upload/${{ steps.version.outputs.VERSION }}
-            ln target/release/${{ matrix.build.artifact }} upload/${{ steps.version.outputs.VERSION }}
-          } || find .
+            mkdir -p upload/
+            ln target/release/${{ matrix.build.artifact }} upload/${{ steps.version.outputs.VERSION }}-${{ matrix.build.artifact }}
       - uses: actions/upload-artifact@v3
         name: Upload
         with:
           name: Executable for ${{ matrix.build.os }}
           path: upload
+
+      - name: Deug Working Dir
+        shell: bash
+        run: find .
 
