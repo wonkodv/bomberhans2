@@ -1,6 +1,9 @@
-name: Release
+name: Build and Publish
 on:
   push:
+defaults:
+  run:
+    shell: bash
 jobs:
   build:
     name: Build and Publish
