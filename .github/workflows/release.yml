@@ -25,14 +25,16 @@ jobs:
         run: |
           echo "VERSION=${GITHUB_REF#refs/tags/} " >> "$GITHUB_OUTPUT"
       - run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run:  cargo build --release
+      - run:  cargo build --release --verbose
       - name:  Gather Artifacts
         run: |
-          mkdir -p upload/${{ steps.version.outputs.VERSION }}
-          ln target/release/${{ matrix.build.artifact }} upload/${{ steps.version.outputs.VERSION }}
+          {
+            mkdir -p upload/${{ steps.version.outputs.VERSION }}
+            ln target/release/${{ matrix.build.artifact }} upload/${{ steps.version.outputs.VERSION }}
+          } || find .
       - uses: actions/upload-artifact@v3
         name: Upload
         with:
           name: Executable for ${{ matrix.build.os }}
-          path: Upload
+          path: upload
 
