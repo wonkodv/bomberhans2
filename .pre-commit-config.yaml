@@ -7,7 +7,7 @@ repos:
       description: check for warnings
       entry: cargo check
       language: system
-      files: \.rs$
+      files: \.rs$|^Cargo\.
       stages: ["commit"]
       pass_filenames: false
     - id: fmt
@@ -15,7 +15,7 @@ repos:
       description: format
       entry: cargo fmt
       language: system
-      files: \.rs$
+      files: \.rs$|^Cargo\.
       stages: ["commit"]
       pass_filenames: false
     - id: clippy
@@ -23,14 +23,13 @@ repos:
       description: clippy
       entry: cargo clippy
       language: system
-      files: \.rs$
+      files: \.rs$|^Cargo\.
       stages: ["push"]
       pass_filenames: false
     - id: build
       name: build
       entry: cargo build
       language: system
-      files: \.rs$
       stages: ["push"]
       pass_filenames: false
     - id: test
@@ -38,6 +37,5 @@ repos:
       description: run tests
       entry: cargo test
       language: system
-      files: \.rs$
       stages: ["push"]
       pass_filenames: false

@@ -10,7 +10,7 @@ jobs:
       matrix:
         build:
           - os: ubuntu-latest
-            artefact: bomberhans
+            artifact: bomberhans2
           - os: windows-latest
             artifact: bomberhans.exe
         toolchain:
@@ -19,11 +19,20 @@ jobs:
     runs-on: ${{ matrix.build.os }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+      - name: Get Tag Version
+        id: version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/} " >> "$GITHUB_OUTPUT"
       - run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
       - run:  cargo build --release
+      - name:  Gather Artifacts
+        run: |
+          mkdir -p upload/${{ steps.version.outputs.VERSION }}
+          ln target/release/${{ matrix.build.artifact }} upload/${{ steps.version.outputs.VERSION }}
       - uses: actions/upload-artifact@v3
+        name: Upload
         with:
-          name: executable
-          path: target/release/${{ matrix.build.artifact }}
+          name: Executable for ${{ matrix.build.os }}
+          path: Upload
 
