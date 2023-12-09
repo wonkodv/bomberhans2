@@ -10,9 +10,11 @@ jobs:
       matrix:
         build:
           - os: ubuntu-latest
-            artifact: bomberhans2
+            artifact_in: target/release/bomberhans2
+            artifact_out: bomberhans2
           - os: windows-latest
-            artifact: bomberhans.exe
+            artifact_in: bomberhans2.exe
+            artifact_out: bomberhans2.exe
         toolchain:
           - stable
 
@@ -31,7 +33,7 @@ jobs:
         shell: bash
         run: |
             mkdir -p upload/
-            ln target/release/${{ matrix.build.artifact }} upload/${{ steps.version.outputs.VERSION }}-${{ matrix.build.artifact }}
+            cp ${{ matrix.build.artifact_in }} upload/${{ steps.version.outputs.VERSION }}-${{ matrix.build.artifact_out }}
       - uses: actions/upload-artifact@v3
         name: Upload
         with:
@@ -39,6 +41,11 @@ jobs:
           path: upload
 
       - name: Deug Working Dir
+        if: ${{ failure() }}
         shell: bash
-        run: find .
+        run: |
+          echo "Something didn't work"
+          pwd
+          find .
+          env
 
