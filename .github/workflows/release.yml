@@ -10,11 +10,13 @@ jobs:
       matrix:
         build:
           - os: ubuntu-latest
-            artifact_in: target/release/bomberhans2
-            artifact_out: bomberhans2
+            artifact: bomberhans2
+            os_name: linux
+
           - os: windows-latest
-            artifact_in: bomberhans2.exe
-            artifact_out: bomberhans2.exe
+            artifact: bomberhans2.exe
+            os_name: windows
+
         toolchain:
           - stable
 
@@ -33,14 +35,14 @@ jobs:
         shell: bash
         run: |
             mkdir -p upload/
-            cp ${{ matrix.build.artifact_in }} upload/${{ steps.version.outputs.VERSION }}-${{ matrix.build.artifact_out }}
+            cp target/release/${{ matrix.build.artifact }} upload/-${{ matrix.build.artifact }}
       - uses: actions/upload-artifact@v3
         name: Upload
         with:
-          name: Executable for ${{ matrix.build.os }}
+          name: BomberHans2-${{ steps.version.outputs.VERSION }}-${{ matrix.build.os_name }}
           path: upload
 
-      - name: Deug Working Dir
+      - name: Debug
         if: ${{ failure() }}
         shell: bash
         run: |
