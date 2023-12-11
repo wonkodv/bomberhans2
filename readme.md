@@ -1,7 +1,7 @@
 Bomberhans
 ==========
 
-![screenshot][screenshot.png]
+![screenshot](screenshot.png)
 
 
 TODOS
