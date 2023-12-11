@@ -3,6 +3,7 @@ fn main() {
     let output = Command::new("git")
         .arg("describe")
         .arg("--tags")
+        .arg("--dirty")
         .arg("--match")
         .arg("v*")
         .output()

@@ -63,7 +63,7 @@ pub fn gui() {
                 player_name: "New Player".into(),
                 textures: None,
                 last_frame: Instant::now(),
-                walking_directions: Vec::new(),
+                walking_directions: DirectionStack::new(),
             })
         }),
     );
@@ -93,17 +93,42 @@ impl TextureManager {
             ""
         };
 
-        let s = match player.action {
-            crate::game::Action::Standing => "standing",
-            crate::game::Action::Placing => "placing",
-            crate::game::Action::Walking => match player.direction {
-                crate::game::Direction::North => "walking_n",
-                crate::game::Direction::West => "walking_w",
-                crate::game::Direction::South => "walking_s",
-                crate::game::Direction::East => "walking_e",
-            },
+        let s = match player.action.walking {
+            Some(crate::game::Direction::North) => "walking_n",
+            Some(crate::game::Direction::West) => "walking_w",
+            Some(crate::game::Direction::South) => "walking_s",
+            Some(crate::game::Direction::East) => "walking_e",
+            None if player.action.placing => "placing",
+            _ => "standing",
         };
         self.get_texture(&format!("hans_{s}{odd}"))
+    }
+}
+
+struct DirectionStack {
+    elements: Vec<Direction>,
+}
+
+impl DirectionStack {
+    pub fn new() -> DirectionStack {
+        Self {
+            elements: Vec::new(),
+        }
+    }
+    pub fn push(&mut self, dir: Direction) {
+        if !self.elements.contains(&dir) {
+            self.elements.push(dir);
+        }
+    }
+
+    pub fn remove(&mut self, dir: Direction) {
+        if let Some(idx) = self.elements.iter().position(|x| x == &dir) {
+            self.elements.remove(idx);
+        }
+    }
+
+    pub fn get(&self) -> Option<Direction> {
+        self.elements.last().copied()
     }
 }
 
@@ -113,7 +138,7 @@ struct MyApp {
     game_name: String,
     player_name: String,
 
-    walking_directions: Vec<Direction>,
+    walking_directions: DirectionStack,
 
     textures: Option<Rc<TextureManager>>,
     last_frame: Instant,
@@ -175,68 +200,30 @@ impl MyApp {
         }
 
         if ui.ctx().input_mut().key_pressed(egui::Key::W) {
-            if !self.walking_directions.contains(&Direction::North) {
-                self.walking_directions.push(Direction::North);
-            }
+            self.walking_directions.push(Direction::North)
         } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
-            if !self.walking_directions.contains(&Direction::South) {
-                self.walking_directions.push(Direction::South);
-            }
+            self.walking_directions.push(Direction::South);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
-            if !self.walking_directions.contains(&Direction::West) {
-                self.walking_directions.push(Direction::West);
-            }
+            self.walking_directions.push(Direction::West);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::D) {
-            if !self.walking_directions.contains(&Direction::East) {
-                self.walking_directions.push(Direction::East);
-            }
+            self.walking_directions.push(Direction::East);
         } else {
             //
         }
 
         if ui.ctx().input_mut().key_released(egui::Key::W) {
-            if let Some(idx) = self
-                .walking_directions
-                .iter()
-                .position(|x| *x == Direction::North)
-            {
-                self.walking_directions.remove(idx);
-            }
+            self.walking_directions.remove(Direction::North);
         } else if ui.ctx().input_mut().key_released(egui::Key::S) {
-            if let Some(idx) = self
-                .walking_directions
-                .iter()
-                .position(|x| *x == Direction::South)
-            {
-                self.walking_directions.remove(idx);
-            }
+            self.walking_directions.remove(Direction::South);
         } else if ui.ctx().input_mut().key_released(egui::Key::A) {
-            if let Some(idx) = self
-                .walking_directions
-                .iter()
-                .position(|x| *x == Direction::West)
-            {
-                self.walking_directions.remove(idx);
-            }
+            self.walking_directions.remove(Direction::West);
         } else if ui.ctx().input_mut().key_released(egui::Key::D) {
-            if let Some(idx) = self
-                .walking_directions
-                .iter()
-                .position(|x| *x == Direction::East)
-            {
-                self.walking_directions.remove(idx);
-            }
+            self.walking_directions.remove(Direction::East);
         }
 
-        if ui.ctx().input_mut().key_down(egui::Key::Space) {
-            game_state.set_player_action(game_state.game.local_player, Action::Placing);
-        } else if let Some(dir) = self.walking_directions.last() {
-            game_state.set_player_direction(game_state.game.local_player, *dir);
-            game_state.set_player_action(game_state.game.local_player, Action::Walking);
-        } else {
-            game_state.set_player_direction(game_state.game.local_player, Direction::South);
-            game_state.set_player_action(game_state.game.local_player, Action::Standing);
-        }
+        let placing = ui.ctx().input_mut().key_down(egui::Key::Space);
+        let walking = self.walking_directions.get();
+        game_state.set_player_action(game_state.game.local_player, Action { placing, walking });
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
         let height = game_state.game.rules.height as f32 * PIXEL_PER_CELL;

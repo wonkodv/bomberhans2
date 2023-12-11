@@ -331,13 +331,6 @@ impl fmt::Debug for Upgrade {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Action {
-    Standing,
-    Placing,
-    Walking,
-}
-
 #[derive(Debug, Clone)]
 pub struct Player {
     /// Name the player chose
@@ -383,11 +376,8 @@ pub struct PlayerState {
     /// current placed bombs. Increased when placing, decreased when exploding.
     pub current_bombs_placed: u8,
 
-    /// current action
+    /// currently walking or placing?
     pub action: Action,
-
-    /// current direction
-    pub direction: Direction,
     // TODO: track total walking distance, total bombs, ...
 }
 
@@ -401,8 +391,7 @@ impl PlayerState {
             speed: 1,
             bombs: 1,
             current_bombs_placed: 0,
-            action: Action::Standing,
-            direction: Direction::South,
+            action: Action::idle(),
         }
     }
 
@@ -420,12 +409,11 @@ impl PlayerState {
     }
 
     fn die(&mut self, _killed_by: PlayerId, start_position: Position) {
-        self.power = 1;
-        self.speed = 1;
-        self.bombs = 1;
+        self.power = u8::max(1, self.power / 2);
+        self.speed = u8::max(1, self.speed / 2);
+        self.bombs = u8::max(1, self.bombs / 2);
         self.position = start_position;
-        self.action = Action::Standing;
-        self.direction = Direction::South;
+        self.action = Action::idle();
     }
 
     fn score(&mut self, _killed: PlayerId) {
@@ -721,6 +709,34 @@ impl Game {
     }
 }
 
+#[derive(PartialEq, Clone)]
+pub struct Action {
+    pub walking: Option<Direction>,
+    pub placing: bool,
+}
+
+impl Action {
+    fn idle() -> Self {
+        Self {
+            walking: None,
+            placing: false,
+        }
+    }
+}
+
+impl fmt::Debug for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.walking {
+            Some(direction) => write!(f, "Waliking {direction:?}")?,
+            None => write!(f, "Standing")?,
+        }
+        if self.placing {
+            write!(f, " & placing")?
+        }
+        Ok(())
+    }
+}
+
 /// The variable state of the game at a given time
 #[derive(Debug, Clone)]
 pub struct State {
@@ -769,19 +785,6 @@ impl State {
         }
         player_state.action = action;
     }
-
-    pub fn set_player_direction(&mut self, player_id: PlayerId, direction: Direction) {
-        let player_state = &mut self.player_states[player_id.0];
-        if player_state.direction != direction {
-            log::info!(
-                "{:?} {:?}.direction := {:?}",
-                self.time,
-                player_id,
-                direction
-            );
-        }
-        player_state.direction = direction;
-    }
 }
 
 /// Update functions, that modify the Game State
@@ -792,14 +795,12 @@ impl State {
 
     /// advance a player 1 tick
     fn update_player(&mut self, player_id: PlayerId) {
-        match self.player_states[player_id.0].action {
-            Action::Standing => {}
-            Action::Placing => {
-                self.place_bomb(player_id);
-            }
-            Action::Walking => {
-                self.walk(player_id);
-            }
+        let action = self.player_states[player_id.0].action.clone();
+        if action.placing {
+            self.place_bomb(player_id);
+        }
+        if action.walking.is_some() {
+            self.walk(player_id);
         };
     }
 
@@ -807,7 +808,10 @@ impl State {
         let player = &self.game.players[player_id.0];
         let player_state = &mut self.player_states[player_id.0];
         let position = player_state.position.add(
-            player_state.direction,
+            player_state
+                .action
+                .walking
+                .expect("only call walking if player is walking"),
             self.game
                 .rules
                 .get_update_walk_distance(player_state.speed)
@@ -919,72 +923,64 @@ impl State {
                 player_state.bombs
             );
         } else {
-            let position = player_state
-                .position
-                .add(player_state.direction, -self.game.rules.bomb_offset);
+            let position = match player_state.action.walking {
+                Some(direction) => player_state
+                    .position
+                    .add(direction, -self.game.rules.bomb_offset)
+                    .unwrap_or(player_state.position),
+                None => player_state.position,
+            };
 
-            if let Some(position) = position {
-                let cell_position = position.as_cell_pos();
-                if self.field.is_cell_in_field(cell_position) {
-                    let cell = &mut self.field[cell_position];
+            let cell_position = position.as_cell_pos();
+            if self.field.is_cell_in_field(cell_position) {
+                let cell = &mut self.field[cell_position];
 
-                    // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
-                    // if you have enough bombs to place, but BEFORE placing the bomb (bomb count
-                    // is not considered, power is)
-                    if let Cell::Upgrade(upgrade) = *cell {
-                        log::info!(
-                            "{:?} {:?} @ {:?}: ate {:?} while placing",
-                            self.time,
-                            player_id,
-                            player_state.position,
-                            upgrade,
-                        );
-                        player_state.eat(upgrade);
-                    }
-
-                    // TODO: placing Bombs into TP and have the Bomb Port would be funny
-                    // TODO: place Bomb into fire for immediate explosion?
-
-                    // GAME_RULE: Bombs can only be placed on empty Cells (after eating any powerups
-                    // there were)
-                    if Cell::Empty == *cell {
-                        player_state.current_bombs_placed += 1;
-                        *cell = Cell::Bomb {
-                            owner: player_id,
-                            expire: self.time + self.game.rules.bomb_time,
-                            // GAME_RULE: power is set AFTER eating powerups at cell
-                            power: player_state.power,
-                        };
-                        log::info!(
-                            "{:?} {:?} @ {:?} placed  {:?}",
-                            self.time,
-                            player_id,
-                            player_state.position,
-                            cell
-                        );
-                    }
-                } else {
-                    log::debug!(
-                        "{:?} {:?} @ {:?} not placing to {:?}",
+                // GAME_RULE: placing a bomb onto a powerup gives you that powerup AFTER checking
+                // if you have enough bombs to place, but BEFORE placing the bomb (bomb count
+                // is not considered, power is)
+                if let Cell::Upgrade(upgrade) = *cell {
+                    log::info!(
+                        "{:?} {:?} @ {:?}: ate {:?} while placing",
                         self.time,
                         player_id,
                         player_state.position,
-                        position
+                        upgrade,
                     );
-                    // TODO: log not placing at position (x or y too large)
+                    player_state.eat(upgrade);
+                }
+
+                // TODO: placing Bombs into TP and have the Bomb Port would be funny
+                // TODO: place Bomb into fire for immediate explosion?
+
+                // GAME_RULE: Bombs can only be placed on empty Cells (after eating any powerups
+                // there were)
+                if Cell::Empty == *cell {
+                    player_state.current_bombs_placed += 1;
+                    *cell = Cell::Bomb {
+                        owner: player_id,
+                        expire: self.time + self.game.rules.bomb_time,
+                        // GAME_RULE: power is set AFTER eating powerups at cell
+                        power: player_state.power,
+                    };
+                    log::info!(
+                        "{:?} {:?} @ {:?} placed  {:?}",
+                        self.time,
+                        player_id,
+                        player_state.position,
+                        cell
+                    );
                 }
             } else {
                 log::debug!(
-                    "{:?} {:?} @ {:?} not placing",
+                    "{:?} {:?} @ {:?} not placing to {:?}",
                     self.time,
                     player_id,
                     player_state.position,
+                    position
                 );
-                // TODO: log not placing at position (x or y too small)
+                // TODO: log not placing at position (x or y too large)
             }
         }
-        player_state.action = Action::Standing; // TODO: remove line so player is still
-                                                // placing and looks funnier?
     }
 
     /// set a cell on fire.
@@ -993,12 +989,6 @@ impl State {
     ///
     /// returns if the fire should continue further in that direction
     fn set_on_fire(&mut self, cell: CellPosition, owner: PlayerId, consider_tp: bool) -> bool {
-        for (id, p) in self.player_states.iter_mut().enumerate() {
-            if p.position.as_cell_pos() == cell {
-                p.die(owner, self.game.players[id].start_position);
-            }
-        }
-
         let (explodes, power, owner) = match self.field[cell] {
             // TODO: Tombstone Explodes based on players schinken?
             Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => (true, 0, owner),
@@ -1054,6 +1044,13 @@ impl State {
                 owner,
                 expire: self.time + self.game.rules.fire_burn_time,
             };
+            for (id, p) in self.player_states.iter_mut().enumerate() {
+                if p.position.as_cell_pos() == cell {
+                    p.die(owner, self.game.players[id].start_position);
+                    self.field[cell] = Cell::TombStone(PlayerId(id));
+                }
+            }
+
             let power: isize = power.into();
             if power > 0 {
                 let x = cell.x as isize;
@@ -1324,16 +1321,16 @@ mod test {
     fn field_looks_equal(actual: &Field, expected: &str) -> bool {
         let expected = Field::new_from_string_grid(expected).expect("parseable");
         if actual.width != expected.width {
-            print!("width different {} != {}", actual.width, expected.width);
+            println!("width different {} != {}", actual.width, expected.width);
             false
         } else if actual.height != expected.height {
-            print!("height different {} != {}", actual.height, expected.height);
+            println!("height different {} != {}", actual.height, expected.height);
             false
         } else {
             let mut eq = true;
             for cell in actual.iter_indices() {
                 if actual[cell].to_char() != expected[cell].to_char() {
-                    print!(
+                    println!(
                         " unexpected at {:?}: {:#?} != {:#?}",
                         cell, actual[cell], expected[cell]
                     );
@@ -1341,11 +1338,11 @@ mod test {
                 }
             }
             if !eq {
-                print!(
+                println!(
                     "Expected:\n    {}",
                     actual.string_grid().replace('\n', "\n    ")
                 );
-                print!(
+                println!(
                     "Actual:\n    {}",
                     actual.string_grid().replace('\n', "\n    ")
                 );
@@ -1463,14 +1460,13 @@ mod test {
 
         gs.field = Field::new_from_string_grid(
             "
-            B_________
+            __________
             __________
             __________
             b_________
             __________
             __________
-            __________
-            __________
+            B_________
         ",
         )
         .unwrap();
@@ -1478,14 +1474,13 @@ mod test {
         gs.update_field();
 
         let expected = "
-            FFFF______
-            F_________
+            __________
+            __________
             F_________
             FF________
             F_________
-            __________
-            __________
-            __________
+            F_________
+            FFFF______
             ";
         assert!(field_looks_equal(&gs.field, expected));
     }
