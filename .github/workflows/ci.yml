@@ -24,7 +24,7 @@ jobs:
             runson: windows-latest
             executable: bomberhans2.exe
             strip: false
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runson }}
 
     steps:
       - uses: actions/checkout@v3

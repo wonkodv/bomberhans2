@@ -263,6 +263,9 @@ pub struct Rules {
     /// percentage that walking on bomb succeeds each update
     pub bomb_walking_chance: u8,
 
+    /// percentage that walking on tombstone succeeds each update
+    pub tombstone_walking_chance: u8,
+
     /// Power of Upgrade Paackets exploding
     pub upgrade_explosion_power: u8,
 
@@ -282,9 +285,10 @@ impl Default for Rules {
             ratios: Ratios::default(),
             bomb_offset: 35,
             bomb_time: Duration::from_seconds(2.0),
-            speed_multiplyer: 2,
-            speed_offset: 5,
+            speed_multiplyer: 130,
+            speed_offset: 700,
             bomb_walking_chance: 80,
+            tombstone_walking_chance: 40,
             upgrade_explosion_power: 1,
             wood_burn_time: Duration::from_seconds(1.0),
             fire_burn_time: Duration::from_seconds(0.5),
@@ -301,6 +305,7 @@ impl Rules {
     fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
         (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer)) * TICKS_PER_SECOND
             / Position::PLAYER_POSITION_ACCURACY
+            / 100
     }
 }
 
@@ -835,11 +840,20 @@ impl State {
                     Cell::StartPoint | Cell::Empty => {
                         player_state.move_(position);
                     }
-                    Cell::Bomb { .. } | Cell::TombStone(..) => {
+                    Cell::Bomb { .. } => {
                         if random(self.time, position.x, position.y) % 100
                             < self.game.rules.bomb_walking_chance.into()
                         {
                             // GAME_RULE: walking on bombs randomly happens or doesn't, decided
+                            // each update.
+                            player_state.move_(position);
+                        }
+                    }
+                    Cell::TombStone { .. } => {
+                        if random(self.time, position.x, position.y) % 100
+                            < self.game.rules.tombstone_walking_chance.into()
+                        {
+                            // GAME_RULE: walking on tombstones randomly happens or doesn't, decided
                             // each update.
                             player_state.move_(position);
                         }
@@ -991,7 +1005,9 @@ impl State {
     fn set_on_fire(&mut self, cell: CellPosition, owner: PlayerId, consider_tp: bool) -> bool {
         let (explodes, power, owner) = match self.field[cell] {
             // TODO: Tombstone Explodes based on players schinken?
-            Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => (true, 0, owner),
+            Cell::StartPoint | Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => {
+                (true, 0, owner)
+            }
             Cell::Bomb {
                 power,
                 owner: bomb_owner,
@@ -1009,7 +1025,7 @@ impl State {
                 (true, self.game.rules.upgrade_explosion_power, owner)
             }
             Cell::Teleport => {
-                if consider_tp {
+                let explodes = if consider_tp {
                     let ports: Vec<CellPosition> = self
                         .field
                         .iter()
@@ -1023,15 +1039,19 @@ impl State {
                         .collect();
                     if ports.is_empty() {
                         log::info!("{cell:?}: destroying Teleport (no remote TP found)");
+                        false
                     } else {
                         let other = ports[random(self.time, cell.x, cell.y).idx() % ports.len()];
                         log::info!("{cell:?}: destroying Teleport, tunneling to {other:?}");
                         self.set_on_fire(other, owner, false);
+                        true
                     }
-                }
-                (true, self.game.rules.upgrade_explosion_power, owner)
+                } else {
+                    true
+                };
+                (explodes, self.game.rules.upgrade_explosion_power, owner)
             }
-            Cell::StartPoint | Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
+            Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
             Cell::Wood => {
                 let expire = self.time + self.game.rules.wood_burn_time;
                 self.field[cell] = Cell::WoodBurning { expire };

@@ -7,9 +7,8 @@ Bomberhans
 TODOS
 ------
 
-*   Make hans walk in the middle of the isle, isle width = 0.1 cell
-
-
+*   Make Hans walk in the middle of the isle, isle width = 0.1 cell
+*  Game Mode Destroy other's start point to win ?
 
 Client Server synchronization
 -----------------------------
