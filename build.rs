@@ -13,7 +13,7 @@ fn main() {
 
     let cargo_version = concat!("v", env!("CARGO_PKG_VERSION"));
     if !git_version.starts_with(cargo_version) {
-        println!("cargo:warning=expected git-version {git_version:?} to match cargo-version {cargo_version:?}")
+        println!("cargo:warning=expected git-version {git_version:?} to match cargo-version {cargo_version:?}");
     }
     println!("cargo:rustc-env=VERSION={git_version}");
 }
