@@ -208,7 +208,7 @@ impl MyApp {
         };
 
         if ui.ctx().input_mut().key_pressed(egui::Key::W) {
-            self.walking_directions.push(Direction::North)
+            self.walking_directions.push(Direction::North);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
             self.walking_directions.push(Direction::South);
         } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
@@ -231,7 +231,7 @@ impl MyApp {
 
         let placing = ui.ctx().input_mut().key_down(egui::Key::Space);
         let walking = self.walking_directions.get();
-        game_state.set_player_action(game_state.game.local_player, Action { placing, walking });
+        game_state.set_player_action(game_state.game.local_player, Action { walking, placing });
     }
 
     fn update_game_draw(&mut self, ui: &mut egui::Ui) {

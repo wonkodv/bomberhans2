@@ -736,7 +736,7 @@ impl fmt::Debug for Action {
             None => write!(f, "Standing")?,
         }
         if self.placing {
-            write!(f, " & placing")?
+            write!(f, " & placing")?;
         }
         Ok(())
     }
