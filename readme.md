@@ -1,14 +1,13 @@
 Bomberhans
 ==========
-
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/wonkodv/bomberhans2/check.yml)
-![More Badges](https://img.shields.io/badge/Hans-on%20fire-red)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/wonkodv/bomberhans2/check.yml)](https://github.com/wonkodv/bomberhans2/actions "CI Checks")
+[![More Badges](https://img.shields.io/badge/Hans-on%20fire-red)](https://raw.githubusercontent.com/wonkodv/bomberhans2/main/images/hans_placing2.bmp "Hans")
 [![GitHub release](https://img.shields.io/github/v/release/wonkodv/bomberhans2)](https://github.com/wonkodv/bomberhans2/releases/latest "Latest Release")
 [![GitHub all releases](https://img.shields.io/github/downloads/wonkodv/bomberhans2/total)](https://github.com/wonkodv/bomberhans2/releases "releases")
-![GitHub watchers](https://img.shields.io/github/watchers/wonkodv/bomberhans2)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/t/wonkodv/bomberhans2)
 ![GitHub repo file count](https://img.shields.io/github/directory-file-count/wonkodv/bomberhans2)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/wonkodv/bomberhans2)
+![GitHub watchers](https://img.shields.io/github/watchers/wonkodv/bomberhans2)
 
 ![screenshot](screenshot.png)
 
