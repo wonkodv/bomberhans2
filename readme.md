@@ -1,7 +1,7 @@
 Bomberhans
 ==========
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/wonkodv/bomberhans2/ci.yml)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/wonkodv/bomberhans2/check.yml)
 ![More Badges](https://img.shields.io/badge/Hans-on%20fire-red)
 [![GitHub release](https://img.shields.io/github/v/release/wonkodv/bomberhans2)](https://github.com/wonkodv/bomberhans2/releases/latest "Latest Release")
 [![GitHub all releases](https://img.shields.io/github/downloads/wonkodv/bomberhans2/total)](https://github.com/wonkodv/bomberhans2/releases "releases")

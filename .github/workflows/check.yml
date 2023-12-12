@@ -1,0 +1,35 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - **.rs
+      - Cargo.*
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    name: Check for ${{ matrix.os }} / ${{ matrix.toolchain }}
+    strategy:
+      matrix:
+        os:
+          - linux
+        toolchain:
+          - stable
+
+        include:
+          - os: linux
+            runson: ubuntu-latest
+
+    runs-on: ${{ matrix.runson }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Toolchain
+        run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: Test
+        run:  cargo test --release --verbose
+      - name: Build
+        run:  cargo build --release --verbose

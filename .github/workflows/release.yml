@@ -1,12 +1,14 @@
-name: Build and Publish
+name: Release
 on:
   push:
+    tags:
+      - v*
 defaults:
   run:
     shell: bash
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
+    name: Release for ${{ matrix.os }}
     strategy:
       matrix:
         os:
@@ -39,6 +41,5 @@ jobs:
         run:  strip target/release/${{ matrix.executable }}
       - name: Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: target/release/${{ matrix.executable }}
