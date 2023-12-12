@@ -4,8 +4,8 @@ on:
     branches:
       - main
     paths:
-      - **.rs
-      - Cargo.*
+      - '**.rs'
+      - 'Cargo.*'
 defaults:
   run:
     shell: bash
