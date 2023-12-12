@@ -24,7 +24,7 @@ use crate::game::State;
 use crate::game::TimeStamp;
 use crate::game::TICKS_PER_SECOND;
 
-const PIXEL_PER_CELL: f32 = 16.0;
+const PIXEL_PER_CELL: f32 = 42.0;
 
 enum Step {
     Initial,
@@ -87,7 +87,7 @@ impl TextureManager {
     }
 
     fn get_player(self: &Rc<Self>, player: &PlayerState, time: TimeStamp) -> TextureId {
-        let odd = if time.ticks_from_start() / 20 % 2 == 0 {
+        let odd = if time.ticks_from_start() / 15 % 2 == 0 {
             "2"
         } else {
             ""
@@ -183,7 +183,12 @@ impl MyApp {
     }
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
-        let textures = self.textures(ui.ctx());
+        self.update_game_simulation();
+        self.update_game_inputs(ui);
+        self.update_game_draw(ui);
+    }
+
+    fn update_game_simulation(&mut self) {
         let Step::Game(ref mut game_state) = self.step else {
             unreachable!();
         };
@@ -192,12 +197,15 @@ impl MyApp {
         let duration = now - self.last_frame;
         self.last_frame = now;
         let ticks = (duration.as_secs_f32() * TICKS_PER_SECOND as f32).round() as u32;
-        ui.ctx()
-            .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
 
         for _ in 0..ticks {
             game_state.update();
         }
+    }
+    fn update_game_inputs(&mut self, ui: &mut egui::Ui) {
+        let Step::Game(ref mut game_state) = self.step else {
+            unreachable!();
+        };
 
         if ui.ctx().input_mut().key_pressed(egui::Key::W) {
             self.walking_directions.push(Direction::North)
@@ -224,6 +232,13 @@ impl MyApp {
         let placing = ui.ctx().input_mut().key_down(egui::Key::Space);
         let walking = self.walking_directions.get();
         game_state.set_player_action(game_state.game.local_player, Action { placing, walking });
+    }
+
+    fn update_game_draw(&mut self, ui: &mut egui::Ui) {
+        let textures = self.textures(ui.ctx());
+        let Step::Game(ref mut game_state) = self.step else {
+            unreachable!();
+        };
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
         let height = game_state.game.rules.height as f32 * PIXEL_PER_CELL;
@@ -266,6 +281,8 @@ impl MyApp {
                 Color32::WHITE,
             )
         }));
+        ui.ctx()
+            .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
     }
 }
 
