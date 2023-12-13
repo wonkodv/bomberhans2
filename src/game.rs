@@ -527,8 +527,6 @@ pub struct Field {
 
 impl Field {
     fn new(width: u32, height: u32) -> Self {
-        assert!(width % 2 == 1);
-        assert!(height % 2 == 1);
         let cells: Vec<Cell> = (0..height)
             .flat_map(|y| {
                 (0..width).map(move |x| {
@@ -1005,9 +1003,8 @@ impl State {
     fn set_on_fire(&mut self, cell: CellPosition, owner: PlayerId, consider_tp: bool) -> bool {
         let (explodes, power, owner) = match self.field[cell] {
             // TODO: Tombstone Explodes based on players schinken?
-            Cell::StartPoint | Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => {
-                (true, 0, owner)
-            }
+            // TODO: Tombstone gives upgrade that player had most of?
+            Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => (true, 0, owner),
             Cell::Bomb {
                 power,
                 owner: bomb_owner,
@@ -1051,7 +1048,7 @@ impl State {
                 };
                 (explodes, self.game.rules.upgrade_explosion_power, owner)
             }
-            Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
+            Cell::StartPoint | Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
             Cell::Wood => {
                 let expire = self.time + self.game.rules.wood_burn_time;
                 self.field[cell] = Cell::WoodBurning { expire };
