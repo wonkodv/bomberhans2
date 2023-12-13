@@ -16,7 +16,6 @@ Bomberhans
 TODOS
 ------
 
-*   Make Hans walk in the middle of the isle, isle width = 0.1 cell
 *   Fit game field into Window
 *   Game Modes:
     *   Destroy other's start point to win

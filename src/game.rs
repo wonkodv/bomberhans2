@@ -810,18 +810,34 @@ impl State {
     fn walk(&mut self, player_id: PlayerId) {
         let player = &self.game.players[player_id.0];
         let player_state = &mut self.player_states[player_id.0];
+
+        let direction = player_state
+            .action
+            .walking
+            .expect("only call walking if player is walking");
+
         let position = player_state.position.add(
-            player_state
-                .action
-                .walking
-                .expect("only call walking if player is walking"),
+            direction,
             self.game
                 .rules
                 .get_update_walk_distance(player_state.speed)
                 .try_into()
                 .expect("walked distance fits i32"),
         );
-        if let Some(position) = position {
+
+        if let Some(mut position) = position {
+            let foo = match direction {
+                Direction::North | Direction::South => &mut position.x,
+                Direction::West | Direction::East => &mut position.y,
+            };
+            *foo = *foo / Position::PLAYER_POSITION_ACCURACY * Position::PLAYER_POSITION_ACCURACY
+                + u32::max(
+                    u32::min(
+                        *foo % Position::PLAYER_POSITION_ACCURACY,
+                        Position::PLAYER_POSITION_ACCURACY * 4 / 5,
+                    ),
+                    Position::PLAYER_POSITION_ACCURACY * 1 / 5,
+                );
             let cell_position = position.as_cell_pos();
             if self.field.is_cell_in_field(cell_position) {
                 let cell = &self.field[cell_position];
