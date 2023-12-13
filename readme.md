@@ -18,7 +18,15 @@ TODOS
 ------
 
 *   Make Hans walk in the middle of the isle, isle width = 0.1 cell
-*  Game Mode Destroy other's start point to win ?
+*   Fit game field into Window
+*   Game Modes:
+    *   Destroy other's start point to win
+    *   Eat schinken at center of field to win
+    *   Tombstones explode with Player's schinken
+    *   Tombstones give powerup's that the player lost when dying
+    *   Teleports explode All other TPs
+    *   Hans gets tired and needs schinken to run
+    *
 
 Client Server synchronization
 -----------------------------
