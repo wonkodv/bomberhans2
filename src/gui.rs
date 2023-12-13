@@ -122,9 +122,12 @@ impl DirectionStack {
     }
 
     pub fn remove(&mut self, dir: Direction) {
-        if let Some(idx) = self.elements.iter().position(|x| x == &dir) {
-            self.elements.remove(idx);
-        }
+        self.elements.remove(
+            self.elements
+                .iter()
+                .position(|x| x == &dir)
+                .expect("removing key that was added"),
+        );
     }
 
     pub fn get(&self) -> Option<Direction> {
@@ -207,26 +210,18 @@ impl MyApp {
             unreachable!();
         };
 
-        if ui.ctx().input_mut().key_pressed(egui::Key::W) {
-            self.walking_directions.push(Direction::North);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::S) {
-            self.walking_directions.push(Direction::South);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::A) {
-            self.walking_directions.push(Direction::West);
-        } else if ui.ctx().input_mut().key_pressed(egui::Key::D) {
-            self.walking_directions.push(Direction::East);
-        } else {
-            //
-        }
-
-        if ui.ctx().input_mut().key_released(egui::Key::W) {
-            self.walking_directions.remove(Direction::North);
-        } else if ui.ctx().input_mut().key_released(egui::Key::S) {
-            self.walking_directions.remove(Direction::South);
-        } else if ui.ctx().input_mut().key_released(egui::Key::A) {
-            self.walking_directions.remove(Direction::West);
-        } else if ui.ctx().input_mut().key_released(egui::Key::D) {
-            self.walking_directions.remove(Direction::East);
+        for (key, direction) in [
+            (egui::Key::W, Direction::North),
+            (egui::Key::S, Direction::South),
+            (egui::Key::A, Direction::West),
+            (egui::Key::D, Direction::East),
+        ] {
+            if ui.ctx().input_mut().key_pressed(key) {
+                self.walking_directions.push(direction);
+            }
+            if ui.ctx().input_mut().key_released(key) {
+                self.walking_directions.remove(direction);
+            }
         }
 
         let placing = ui.ctx().input_mut().key_down(egui::Key::Space);
