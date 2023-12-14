@@ -50,8 +50,8 @@ fn cell_rect(pos: CellPosition, offset: Pos2) -> egui::Rect {
 }
 
 fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
-    let x = pos.x as f32 / Position::PLAYER_POSITION_ACCURACY as f32 * PIXEL_PER_CELL + offset.x;
-    let y = pos.y as f32 / Position::PLAYER_POSITION_ACCURACY as f32 * PIXEL_PER_CELL + offset.y;
+    let x = pos.x as f32 / Position::ACCURACY as f32 * PIXEL_PER_CELL + offset.x;
+    let y = (pos.y as f32 / Position::ACCURACY as f32 - 0.2) * PIXEL_PER_CELL + offset.y;
     let p = PIXEL_PER_CELL / 2.0;
 
     Rect::from_min_max(pos2(x - p, y - p), pos2(x + p, y + p))
@@ -339,20 +339,22 @@ impl MyApp {
 
         });
 
-        if ui.button("Restore Default Settings").clicked() {
-            self.settings = Settings::default();
-        }
-
-        {
-            let button = ui
-                .button("Start local Game")
-                .on_hover_text("Start a local Game without network players");
-            let mut memory = ui.memory();
-            if memory.focus().is_none() {
-                memory.request_focus(button.id); // TODO: this flickers
+        ui.horizontal(|ui| {
+            if ui.button("Restore Default Settings").clicked() {
+                self.settings = Settings::default();
             }
 
-            if button.clicked() {
+            let start_button = ui
+                .button("Start local Game")
+                .on_hover_text("Start a local Game without network players");
+            {
+                let mut memory = ui.memory();
+                if memory.focus().is_none() {
+                    memory.request_focus(start_button.id); // TODO: this flickers
+                }
+            }
+
+            if start_button.clicked() {
                 match confy::store("bomberhans2", Some("new_game_settings"), &self.settings) {
                     Ok(_) => log::info!("Settings stored"),
                     Err(e) => log::error!("Error storing config: {e}"),
@@ -364,7 +366,11 @@ impl MyApp {
                 self.step = Step::Game(game_state);
                 return;
             }
-        }
+
+            if ui.button("Don't Panic!").clicked() {
+                panic!("why would you?");
+            }
+        });
     }
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
