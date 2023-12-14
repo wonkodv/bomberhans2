@@ -34,7 +34,7 @@ enum Step {
 
 impl Step {
     fn game_state(&mut self) -> &mut State {
-        if let Step::Game(state) = self {
+        if let Step::Game(ref mut state) = *self {
             state
         } else {
             panic!("no game running");
@@ -259,8 +259,9 @@ impl MyApp {
             });
 
             ui.vertical(|ui| {
-                ui.heading("Ratios of cells that burned wood will turn into");
                 const RATIO_RANGE: std::ops::RangeInclusive<u32> =0..=50;
+
+                ui.heading("Ratios of cells that burned wood will turn into");
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::Slider::new(&mut rules.ratios.power, RATIO_RANGE).text("Power Upgrade"),
@@ -350,7 +351,7 @@ impl MyApp {
     }
 
     fn update_game_simulation(&mut self) {
-        let game_state: &mut State = self.step.game_state();
+        let game_state = self.step.game_state();
 
         let now = Instant::now();
         let duration = now - self.last_frame;
@@ -362,7 +363,7 @@ impl MyApp {
         }
     }
     fn update_game_inputs(&mut self, ui: &mut egui::Ui) {
-        let game_state: &mut State = self.step.game_state();
+        let game_state = self.step.game_state();
 
         for (key, direction) in [
             (egui::Key::W, Direction::North),
@@ -386,7 +387,7 @@ impl MyApp {
     fn update_game_draw(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
 
-        if ui
+        let game_over = ui
             .horizontal(|ui| {
                 ui.label(&self.step.game_state().game.name);
                 let button = ui.button("Stop Game");
@@ -397,13 +398,13 @@ impl MyApp {
                     false
                 }
             })
-            .inner
-        {
+            .inner;
+        if game_over {
             return;
         };
 
         let step = &mut self.step;
-        let game_state: &mut State = step.game_state();
+        let game_state = step.game_state();
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
         let height = game_state.game.rules.height as f32 * PIXEL_PER_CELL;

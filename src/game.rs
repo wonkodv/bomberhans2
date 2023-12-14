@@ -673,14 +673,14 @@ impl State {
 
     fn walk(&mut self, player_id: PlayerId) {
         let player = &self.game.players[player_id.0];
-        let player_state = &mut self.player_states[player_id.0];
+        let player_state = &self.player_states[player_id.0];
 
         let direction = player_state
             .action
             .walking
             .expect("only call walking if player is walking");
 
-        let position = player_state.position.add(
+        let new_position = player_state.position.add(
             direction,
             self.game
                 .rules
@@ -689,118 +689,131 @@ impl State {
                 .expect("walked distance fits i32"),
         );
 
-        if let Some(mut position) = position {
-            let foo = match direction {
-                Direction::North | Direction::South => &mut position.x,
-                Direction::West | Direction::East => &mut position.y,
+        if let Some(mut new_position) = new_position {
+            let smothing_axis = match direction {
+                Direction::North | Direction::South => &mut new_position.x,
+                Direction::West | Direction::East => &mut new_position.y,
             };
-            *foo = *foo / Position::PLAYER_POSITION_ACCURACY * Position::PLAYER_POSITION_ACCURACY
+            *smothing_axis = *smothing_axis / Position::PLAYER_POSITION_ACCURACY
+                * Position::PLAYER_POSITION_ACCURACY
                 + u32::max(
                     u32::min(
-                        *foo % Position::PLAYER_POSITION_ACCURACY,
+                        *smothing_axis % Position::PLAYER_POSITION_ACCURACY,
                         Position::PLAYER_POSITION_ACCURACY * 4 / 5,
                     ),
-                    Position::PLAYER_POSITION_ACCURACY * 1 / 5,
+                    Position::PLAYER_POSITION_ACCURACY / 5,
                 );
-            let cell_position = position.as_cell_pos();
-            if self.field.is_cell_in_field(cell_position) {
-                let cell = &self.field[cell_position];
-                log::debug!(
-                    "{:?} {:?} @ {:?} walking to {:?} == {:?} ({:?}) ",
+            let cell_position = new_position.as_cell_pos();
+            if self.field.is_cell_in_field(new_position.as_cell_pos()) {
+                self.walk_on_cell(player_id, new_position);
+            }
+        }
+    }
+
+    fn walk_on_cell(&mut self, player_id: PlayerId, new_position: Position) {
+        let player = &self.game.players[player_id.0];
+        let player_state = &mut self.player_states[player_id.0];
+        let cell_position = new_position.as_cell_pos();
+        let cell = &self.field[cell_position];
+        log::debug!(
+            "{:?} {:?} @ {:?} walking to {:?} == {:?} ({:?}) ",
+            self.time,
+            player_id,
+            player_state.position,
+            new_position,
+            cell_position,
+            &cell
+        );
+        match *cell {
+            Cell::StartPoint | Cell::Empty => {
+                player_state.move_(new_position);
+            }
+            Cell::Bomb { .. } => {
+                if random(self.time, new_position.x, new_position.y) % 100
+                    < self.game.rules.bomb_walking_chance
+                {
+                    // GAME_RULE: walking on bombs randomly happens or doesn't, decided
+                    // each update.
+                    player_state.move_(new_position);
+                }
+            }
+            Cell::TombStone { .. } => {
+                if random(self.time, new_position.x, new_position.y) % 100
+                    < self.game.rules.tombstone_walking_chance
+                {
+                    // GAME_RULE: walking on tombstones randomly happens or doesn't, decided
+                    // each update.
+                    player_state.move_(new_position);
+                }
+            }
+            Cell::Fire { owner, .. } => {
+                // GAME_RULE: walking into fire counts as kill by fire owner
+                // TODO: seperate counter?
+                player_state.die(owner, player.start_position);
+                self.player_states[owner.0].score(player_id);
+                self.field[cell_position] = Cell::TombStone(player_id);
+
+                log::info!(
+                    "{:?} {:?} @ {:?} suicided",
+                    self.time,
+                    player_id,
+                    new_position,
+                );
+            }
+            Cell::Upgrade(upgrade) => {
+                player_state.move_(new_position);
+                player_state.eat(upgrade);
+                self.field[cell_position] = Cell::Empty;
+
+                log::info!(
+                    "{:?} {:?} @ {:?} ate {:?}, {:?}",
                     self.time,
                     player_id,
                     player_state.position,
-                    position,
-                    cell_position,
-                    &cell
+                    upgrade,
+                    player_state
                 );
-                match *cell {
-                    Cell::StartPoint | Cell::Empty => {
-                        player_state.move_(position);
-                    }
-                    Cell::Bomb { .. } => {
-                        if random(self.time, position.x, position.y) % 100
-                            < self.game.rules.bomb_walking_chance.into()
-                        {
-                            // GAME_RULE: walking on bombs randomly happens or doesn't, decided
-                            // each update.
-                            player_state.move_(position);
-                        }
-                    }
-                    Cell::TombStone { .. } => {
-                        if random(self.time, position.x, position.y) % 100
-                            < self.game.rules.tombstone_walking_chance.into()
-                        {
-                            // GAME_RULE: walking on tombstones randomly happens or doesn't, decided
-                            // each update.
-                            player_state.move_(position);
-                        }
-                    }
-                    Cell::Fire { owner, .. } => {
-                        // GAME_RULE: walking into fire counts as kill by fire owner
-                        // TODO: seperate counter?
-                        player_state.die(owner, player.start_position);
-                        self.player_states[owner.0].score(player_id);
-                        self.field[cell_position] = Cell::TombStone(player_id);
+            }
+            Cell::Teleport => {
+                let targets: Vec<(CellPosition, &Cell)> = self
+                    .field
+                    .iter()
+                    .filter(|&(target_position, target_cell)| {
+                        *target_cell == Cell::Teleport && target_position != cell_position
+                    })
+                    .collect();
+                if targets.is_empty() {
+                    log::info!(
+                        "{:?} {:?} @ {:?} can not walk onto Teleport, it is not connected",
+                        self.time,
+                        player_id,
+                        cell_position,
+                    );
+                    // GAME_RULE: you can not walk onto an unconnected TP :P
+                    // player_state.move_(position);
+                } else {
+                    let target = targets[random(self.time, new_position.x, new_position.y)
+                        as usize
+                        % targets.len()];
+                    let (to, target_cell): (_, &Cell) = target;
+                    assert_eq!(*target_cell, Cell::Teleport);
 
-                        log::info!("{:?} {:?} @ {:?} suicided", self.time, player_id, position,);
-                    }
-                    Cell::Upgrade(upgrade) => {
-                        player_state.move_(position);
-                        player_state.eat(upgrade);
-                        self.field[cell_position] = Cell::Empty;
+                    player_state.move_(Position::from_cell_position(to));
 
-                        log::info!(
-                            "{:?} {:?} @ {:?} ate {:?}, {:?}",
-                            self.time,
-                            player_id,
-                            player_state.position,
-                            upgrade,
-                            player_state
-                        );
-                    }
-                    Cell::Teleport => {
-                        let targets: Vec<(CellPosition, &Cell)> = self
-                            .field
-                            .iter()
-                            .filter(|&(target_position, target_cell)| {
-                                *target_cell == Cell::Teleport && target_position != cell_position
-                            })
-                            .collect();
-                        if targets.is_empty() {
-                            log::info!(
-                                "{:?} {:?} @ {:?} can not walk onto Teleport, it is not connected",
-                                self.time,
-                                player_id,
-                                cell_position,
-                            );
-                            // GAME_RULE: you can not walk onto an unconnected TP :P
-                            // player_state.move_(position);
-                        } else {
-                            let target = targets[random(self.time, position.x, position.y)
-                                as usize
-                                % targets.len()];
-                            let (to, target_cell): (_, &Cell) = target;
-                            assert_eq!(*target_cell, Cell::Teleport);
-
-                            player_state.move_(Position::from_cell_position(to));
-
-                            debug_assert_eq!(self.field[cell_position], Cell::Teleport);
-                            debug_assert_eq!(self.field[to], Cell::Teleport);
-                            self.field[cell_position] = Cell::Empty;
-                            self.field[to] = Cell::Empty;
-                            log::info!(
-                                "{:?} {:?} @ {:?} ported to {:?}",
-                                self.time,
-                                player_id,
-                                cell_position,
-                                to
-                            );
-                        }
-                    }
-                    Cell::Wall | Cell::Wood | Cell::WoodBurning { .. } => {} /* no walking through walls */
+                    debug_assert_eq!(self.field[cell_position], Cell::Teleport);
+                    debug_assert_eq!(self.field[to], Cell::Teleport);
+                    self.field[cell_position] = Cell::Empty;
+                    self.field[to] = Cell::Empty;
+                    log::info!(
+                        "{:?} {:?} @ {:?} ported to {:?}",
+                        self.time,
+                        player_id,
+                        cell_position,
+                        to
+                    );
                 }
             }
+            Cell::Wall | Cell::Wood | Cell::WoodBurning { .. } => {} /* no walking through walls */
         }
     }
 
