@@ -1,7 +1,7 @@
 mod game;
 mod gui;
 mod network;
-mod rules;
+mod settings;
 mod utils;
 
 use std::io::Write;
