@@ -10,7 +10,6 @@ keywords = [ "game", "bomberman" ]
 categories  = [ "games" ]
 readme = "readme.md"
 
-
 [dependencies]
 confy = "0.5.1"
 eframe = "0.20.1"
@@ -20,19 +19,27 @@ image = { version = "0.24.5", default-features = false, features = ["bmp"] }
 log = "0.4.20"
 serde = { version = "1.0.193", features = ["derive"] }
 
+
+[profile.release]
+strip = true
+debug-assertions = true
+overflow-checks = true
+lto = "thin"
+panic = "abort"
+
+
 [lints.rust]
 unsafe_code = "forbid"
 dead_code          = "allow" # TODO
 unused_variables   = "allow" # TODO
 unreachable_code   = "allow" # TODO
 
+
 [lints.clippy]
 unusual_byte_groupings = "allow"
-zero_prefixed_literal = "allow"
 
 cargo = "warn"
 multiple_crate_versions = { level = "allow", priority=2} # 😢
-
 
 pedantic = "warn"
 cast_possible_wrap = "allow"         # working with numbers is hard :/
@@ -40,7 +47,7 @@ cast_possible_truncation = "allow"   # working with numbers is hard :/
 cast_precision_loss = "allow"        # working with numbers is hard :/
 cast_sign_loss = "allow"             # working with numbers is hard :/
 
-
+# restrict group
 clone_on_ref_ptr = "warn"
 format_push_string = "warn"
 get_unwrap = "warn"
