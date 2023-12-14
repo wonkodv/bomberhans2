@@ -57,9 +57,9 @@ impl Ratios {
         self.power + self.speed + self.bombs + self.teleport + self.wall + self.wood + self.clear
     }
     pub fn random(&self, random: u32) -> Cell {
-        let sum: u32 = self.sum();
+        let sum = self.sum();
 
-        let mut random: u32 = random % sum;
+        let mut random = random % sum;
 
         if random < self.power {
             return Cell::Upgrade(Upgrade::Power);

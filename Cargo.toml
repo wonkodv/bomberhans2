@@ -52,4 +52,3 @@ try_err = "warn"
 unneeded_field_pattern="warn"
 unseparated_literal_suffix  = "warn"
 verbose_file_reads = "warn"
-shadow_unrelated = "warn" # ?
