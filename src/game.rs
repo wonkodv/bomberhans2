@@ -594,9 +594,9 @@ impl Game {
         let field = Field::new(settings.width, settings.height);
         let start_positions = field.start_positions();
 
-        assert!(start_positions.len() <= settings.players as _);
+        assert!(start_positions.len() >= settings.players as _);
 
-        let local_player = PlayerId(1);
+        let local_player = PlayerId(0);
 
         let players: Vec<Player> = (0..(settings.players as usize))
             .map(|id| Player {

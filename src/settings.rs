@@ -198,7 +198,7 @@ impl Settings {
     pub const HEIGHT_DEFAULT: u32 = 13;
     pub const HEIGHT_RANGE: RangeInclusive<u32> = Self::WIDTH_RANGE;
     pub const PLAYERS_DEFAULT: u32 = 4;
-    pub const PLAYERS_RANGE: RangeInclusive<u32> = 1..=10;
+    pub const PLAYERS_RANGE: RangeInclusive<u32> = 1..=4; // TODO: generate maps with more players
     pub const RATIOS_RANGE: RangeInclusive<u32> = 0..=100;
     pub const SPEED_BASE_DEFAULT: u32 = 700;
     pub const SPEED_BASE_RANGE: RangeInclusive<u32> = 10..=2_000;
