@@ -367,8 +367,8 @@ impl MyApp {
                 return;
             }
 
-            if ui.button("Don't Panic!").clicked() {
-                panic!("why would you?");
+            if ui.button("Don't click").clicked() {
+                panic!("Don't click?");
             }
         });
     }
