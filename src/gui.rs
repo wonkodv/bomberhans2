@@ -22,7 +22,7 @@ use crate::game::Position;
 use crate::game::State;
 use crate::game::TimeStamp;
 use crate::game::TICKS_PER_SECOND;
-use crate::rules::Rules;
+use crate::settings::Settings;
 
 const PIXEL_PER_CELL: f32 = 42.0;
 
@@ -58,6 +58,17 @@ fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
 }
 
 pub fn gui() {
+    let settings: Settings = match confy::load("bomberhans2", Some("new_game_settings")) {
+        Ok(settings) => {
+            log::info!("Settings stored");
+            settings
+        }
+        Err(e) => {
+            log::error!("Error storing config: {e}");
+            Settings::default()
+        }
+    };
+
     let options = eframe::NativeOptions {
         initial_window_size: Some(egui::vec2(600.0, 600.0)),
         ..Default::default()
@@ -68,8 +79,7 @@ pub fn gui() {
         Box::new(|_cc| {
             Box::new(MyApp {
                 step: Step::Initial,
-                rules: Rules::default(),
-                game_name: "A Game of Bomberhans".into(),
+                settings,
                 player_name: "New Player".into(),
                 textures: None,
                 last_frame: Instant::now(),
@@ -147,8 +157,7 @@ impl DirectionStack {
 
 struct MyApp {
     step: Step,
-    rules: Rules,
-    game_name: String,
+    settings: Settings,
     player_name: String,
 
     walking_directions: DirectionStack,
@@ -166,59 +175,61 @@ impl MyApp {
         }))
     }
 
+    #[allow(clippy::too_many_lines)] // GUI code has to be long and ugly
     fn update_initial(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
+
+        let settings = &mut self.settings;
 
         ui.style_mut().spacing.slider_width = 300.0;
 
         if let Step::GameOver(ref s) = self.step {
             ui.label(format!("GameOver: {s}"));
         }
-        ui.add(egui::TextEdit::singleline(&mut self.game_name))
+        ui.add(egui::TextEdit::singleline(&mut settings.game_name))
             .on_hover_text("Name of the Game");
 
-        let rules = &mut self.rules;
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.heading("Game Options");
                 ui.add(
-                    egui::Slider::new(&mut rules.width, Rules::WIDTH_RANGE)
+                    egui::Slider::new(&mut settings.width, Settings::WIDTH_RANGE)
                         .text("Width")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Width of the game field [cells]");
                 ui.add(
-                    egui::Slider::new(&mut rules.height, Rules::HEIGHT_RANGE)
+                    egui::Slider::new(&mut settings.height, Settings::HEIGHT_RANGE)
                         .text("Height")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Height of the game field [cells]");
                 ui.add(
-                    egui::Slider::new(&mut rules.players, Rules::PLAYERS_RANGE)
+                    egui::Slider::new(&mut settings.players, Settings::PLAYERS_RANGE)
                         .text("Players")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Number of players that can join this game");
                 ui.add(
-                    egui::Slider::new(&mut rules.bomb_explode_time_ms, Rules::BOMB_TIME_RANGE)
+                    egui::Slider::new(&mut settings.bomb_explode_time_ms, Settings::BOMB_TIME_RANGE)
                         .text("Bomb Time")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Time between placing a bomb and its explosion [ms]");
                 ui.add(
-                    egui::Slider::new(&mut rules.speed_base, Rules::SPEED_BASE_RANGE)
+                    egui::Slider::new(&mut settings.speed_base, Settings::SPEED_BASE_RANGE)
                         .text("Base Speed"),
                 )
                 .on_hover_text("Speed of the Player without any upgrades [Cells/s/100]");
                 ui.add(
-                    egui::Slider::new(&mut rules.speed_multiplyer, Rules::SPEED_MULTIPLYER_RANGE)
+                    egui::Slider::new(&mut settings.speed_multiplyer, Settings::SPEED_MULTIPLYER_RANGE)
                         .text("Speed Increase"),
                 )
                 .on_hover_text("Player speed increase per speed powerup [Cells/s/100]");
                 ui.add(
                     egui::Slider::new(
-                        &mut rules.bomb_walking_chance,
-                        Rules::BOMB_WALKING_CHANCE_RANGE,
+                        &mut settings.bomb_walking_chance,
+                        Settings::BOMB_WALKING_CHANCE_RANGE,
                     )
                     .text("Bomb Walking")
                     .clamp_to_range(true),
@@ -226,8 +237,8 @@ impl MyApp {
                 .on_hover_text("Chance that a player can walk over a bomb in an update [%]");
                 ui.add(
                     egui::Slider::new(
-                        &mut rules.tombstone_walking_chance,
-                        Rules::TOMBSTONE_WALKING_CHANCE_RANGE,
+                        &mut settings.tombstone_walking_chance,
+                        Settings::TOMBSTONE_WALKING_CHANCE_RANGE,
                     )
                     .text("Tombstone Walking")
                     .clamp_to_range(true),
@@ -235,24 +246,24 @@ impl MyApp {
                 .on_hover_text("Chance that a player can walk over a tombstone in an update [%]");
                 ui.add(
                     egui::Slider::new(
-                        &mut rules.upgrade_explosion_power,
-                        Rules::UPGRADE_EXPLOSION_POWER_RANGE,
+                        &mut settings.upgrade_explosion_power,
+                        Settings::UPGRADE_EXPLOSION_POWER_RANGE,
                     )
                     .text("Upgrade Explosion"),
                 )
                 .on_hover_text("Explosion Range of ignited Powerups [cells]");
                 ui.add(
-                    egui::Slider::new(&mut rules.wood_burn_time_ms, Rules::WOOD_BURN_TIME_RANGE)
+                    egui::Slider::new(&mut settings.wood_burn_time_ms, Settings::WOOD_BURN_TIME_RANGE)
                         .text("Wood Burn Time"),
                 )
                 .on_hover_text("Time that wood burns after igniting [ms]");
                 ui.add(
-                    egui::Slider::new(&mut rules.fire_burn_time_ms, Rules::FIRE_BURN_TIME_RANGE)
+                    egui::Slider::new(&mut settings.fire_burn_time_ms, Settings::FIRE_BURN_TIME_RANGE)
                         .text("Fire Burn Time"),
                 )
                 .on_hover_text("Time that fire burns [ms]");
                 ui.add(
-                    egui::Slider::new(&mut rules.bomb_offset, Rules::BOMB_OFFSET_RANGE)
+                    egui::Slider::new(&mut settings.bomb_offset, Settings::BOMB_OFFSET_RANGE)
                         .text("Bomb Placement Offset"),
                 )
                 .on_hover_text("While running, how far behind hans a bomb is placed [cells/100]");
@@ -264,28 +275,28 @@ impl MyApp {
                 ui.heading("Ratios of cells that burned wood will turn into");
                 ui.horizontal(|ui| {
                     ui.add(
-                        egui::Slider::new(&mut rules.ratios.power, RATIO_RANGE).text("Power Upgrade"),
+                        egui::Slider::new(&mut settings.ratios.power, RATIO_RANGE).text("Power Upgrade"),
                     );
                 }). response.on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
                 ui.horizontal(|ui| {
                     ui.add(
-                        egui::Slider::new(&mut rules.ratios.speed, RATIO_RANGE).text("Speed Upgrade"),
+                        egui::Slider::new(&mut settings.ratios.speed, RATIO_RANGE).text("Speed Upgrade"),
                     );
                 }). response.on_hover_text("Consuming this will upgrade the player's walking speed");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut rules.ratios.bombs, RATIO_RANGE).text("Bomb Upgrade"));
+                    ui.add(egui::Slider::new(&mut settings.ratios.bombs, RATIO_RANGE).text("Bomb Upgrade"));
                 }). response.on_hover_text("Consuming this will increase how many bombs the player can place simultaneously");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut rules.ratios.teleport, RATIO_RANGE).text("Teleport"));
+                    ui.add(egui::Slider::new(&mut settings.ratios.teleport, RATIO_RANGE).text("Teleport"));
                 }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut rules.ratios.wall, RATIO_RANGE).text("Wall"));
+                    ui.add(egui::Slider::new(&mut settings.ratios.wall, RATIO_RANGE).text("Wall"));
                 }). response.on_hover_text("Wall\nIf this happens too often, you will be stuck.");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut rules.ratios.wood, RATIO_RANGE).text("Wood"));
+                    ui.add(egui::Slider::new(&mut settings.ratios.wood, RATIO_RANGE).text("Wood"));
                 }). response.on_hover_text("Wood\nYou can try and explode again");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut rules.ratios.clear, RATIO_RANGE).text("Empty Cell"));
+                    ui.add(egui::Slider::new(&mut settings.ratios.clear, RATIO_RANGE).text("Empty Cell"));
                 }). response.on_hover_text("Just a boring empty Cell");
             });
 
@@ -293,7 +304,7 @@ impl MyApp {
             ui.vertical(|ui| {
                 ui.heading("effective Ratios");
                 let image_dims = egui::Vec2 { x: 16.0, y: 16.0 };
-                let percentages = rules.ratios.normalize();
+                let percentages = settings.ratios.normalize();
 
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_upgrade_power"), image_dims);
@@ -328,19 +339,31 @@ impl MyApp {
 
         });
 
-        let button = ui
-            .button("Start local Game")
-            .on_hover_text("Start a local Game without network players");
-        let mut memory = ui.memory();
-        if memory.focus().is_none() {
-            memory.request_focus(button.id); // TODO: this flickers
+        if ui.button("Restore Default Settings").clicked() {
+            self.settings = Settings::default();
         }
 
-        if button.clicked() {
-            let game = Game::new_local_game(self.game_name.clone(), self.rules.clone());
-            let game = Rc::new(game);
-            let game_state = State::new(game);
-            self.step = Step::Game(game_state);
+        {
+            let button = ui
+                .button("Start local Game")
+                .on_hover_text("Start a local Game without network players");
+            let mut memory = ui.memory();
+            if memory.focus().is_none() {
+                memory.request_focus(button.id); // TODO: this flickers
+            }
+
+            if button.clicked() {
+                match confy::store("bomberhans2", Some("new_game_settings"), &self.settings) {
+                    Ok(_) => log::info!("Settings stored"),
+                    Err(e) => log::error!("Error storing config: {e}"),
+                }
+
+                let game = Game::new_local_game(self.settings.clone());
+                let game = Rc::new(game);
+                let game_state = State::new(game);
+                self.step = Step::Game(game_state);
+                return;
+            }
         }
     }
 
@@ -389,7 +412,7 @@ impl MyApp {
 
         let game_over = ui
             .horizontal(|ui| {
-                ui.label(&self.step.game_state().game.name);
+                ui.label(&self.step.game_state().game.settings.game_name);
                 let button = ui.button("Stop Game");
                 if button.clicked() {
                     self.step = Step::GameOver("You pressed Stop".to_owned());
@@ -406,8 +429,8 @@ impl MyApp {
         let step = &mut self.step;
         let game_state = step.game_state();
 
-        let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
-        let height = game_state.game.rules.height as f32 * PIXEL_PER_CELL;
+        let width = game_state.game.settings.width as f32 * PIXEL_PER_CELL;
+        let height = game_state.game.settings.height as f32 * PIXEL_PER_CELL;
 
         let game_field = ui.image(
             textures.get_texture("background"),

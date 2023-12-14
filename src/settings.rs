@@ -1,5 +1,8 @@
 use std::ops::RangeInclusive;
 
+use serde::Deserialize;
+use serde::Serialize;
+
 use crate::game::Cell;
 use crate::game::Duration;
 use crate::game::Position;
@@ -7,7 +10,7 @@ use crate::game::Upgrade;
 use crate::game::TICKS_PER_SECOND;
 
 /// Ratios of Wood turning into those cell types:
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ratios {
     pub power: u32,
     pub speed: u32,
@@ -90,7 +93,7 @@ impl Ratios {
         }
         random -= self.wall;
 
-        assert!(random < self.clear - 1);
+        assert!(random < self.clear);
         Cell::Empty
     }
 
@@ -117,8 +120,11 @@ impl Ratios {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Rules {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Settings {
+    /// Name of the game
+    pub game_name: String,
+
     /// field width
     pub width: u32,
 
@@ -159,9 +165,10 @@ pub struct Rules {
     pub ratios: Ratios,
 }
 
-impl Default for Rules {
+impl Default for Settings {
     fn default() -> Self {
-        Rules {
+        Settings {
+            game_name: "A Game of Bomberhans".to_owned(),
             width: Self::WIDTH_DEFAULT,
             height: Self::HEIGHT_DEFAULT,
             players: Self::PLAYERS_DEFAULT,
@@ -179,10 +186,10 @@ impl Default for Rules {
     }
 }
 
-impl Rules {
+impl Settings {
     pub const BOMB_OFFSET_DEFAULT: u32 = 49;
     pub const BOMB_OFFSET_RANGE: RangeInclusive<u32> = 0..=100;
-    pub const BOMB_TIME_DEFAULT: u32 = 2_000;
+    pub const BOMB_TIME_DEFAULT: u32 = 4267;
     pub const BOMB_TIME_RANGE: RangeInclusive<u32> = 100..=10_000;
     pub const BOMB_WALKING_CHANCE_DEFAULT: u32 = 80;
     pub const BOMB_WALKING_CHANCE_RANGE: RangeInclusive<u32> = 0..=100;

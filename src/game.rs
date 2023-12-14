@@ -1,4 +1,4 @@
-use crate::rules::Rules;
+use crate::settings::Settings;
 use crate::utils::Idx;
 use std::fmt;
 use std::ops::Index;
@@ -417,8 +417,8 @@ impl Field {
         }
     }
 
-    fn new_from_rules(rules: &Rules) -> Self {
-        Self::new(rules.width, rules.height)
+    fn new_from_rules(settings: &Settings) -> Self {
+        Self::new(settings.width, settings.height)
     }
 
     pub fn is_cell_in_field(&self, cell: CellPosition) -> bool {
@@ -538,25 +538,24 @@ impl<'f> FieldMutIterator<'f> {
 /// Constants of an active Game
 #[derive(Debug)]
 pub struct Game {
-    pub name: String,
     pub players: Vec<Player>,
-    pub rules: Rules,
+    pub settings: Settings,
     pub local_player: PlayerId,
 }
 
 impl Game {
-    pub fn new_local_game(name: String, rules: Rules) -> Self {
-        let field = Field::new(rules.width, rules.height);
+    pub fn new_local_game(settings: Settings) -> Self {
+        let field = Field::new(settings.width, settings.height);
         let start_positions = field.start_positions();
 
-        assert!(start_positions.len() <= rules.players as _);
+        assert!(start_positions.len() <= settings.players as _);
 
         let local_player = PlayerId(1);
 
-        let players: Vec<Player> = (0..(rules.players as usize))
+        let players: Vec<Player> = (0..(settings.players as usize))
             .map(|id| Player {
                 name: {
-                    if id == local_player.0 as _ {
+                    if id == local_player.0 {
                         format!("Player {id}")
                     } else {
                         "Local Player".into()
@@ -568,9 +567,8 @@ impl Game {
             .collect();
 
         Self {
-            name,
             players,
-            rules,
+            settings,
             local_player,
         }
     }
@@ -624,7 +622,7 @@ impl State {
             .map(|p| PlayerState::new(p.start_position))
             .collect();
 
-        let field = Field::new_from_rules(&game.rules);
+        let field = Field::new_from_rules(&game.settings);
 
         Self {
             time,
@@ -683,7 +681,7 @@ impl State {
         let new_position = player_state.position.add(
             direction,
             self.game
-                .rules
+                .settings
                 .get_update_walk_distance(player_state.speed)
                 .try_into()
                 .expect("walked distance fits i32"),
@@ -730,7 +728,7 @@ impl State {
             }
             Cell::Bomb { .. } => {
                 if random(self.time, new_position.x, new_position.y) % 100
-                    < self.game.rules.bomb_walking_chance
+                    < self.game.settings.bomb_walking_chance
                 {
                     // GAME_RULE: walking on bombs randomly happens or doesn't, decided
                     // each update.
@@ -739,7 +737,7 @@ impl State {
             }
             Cell::TombStone { .. } => {
                 if random(self.time, new_position.x, new_position.y) % 100
-                    < self.game.rules.tombstone_walking_chance
+                    < self.game.settings.tombstone_walking_chance
                 {
                     // GAME_RULE: walking on tombstones randomly happens or doesn't, decided
                     // each update.
@@ -833,8 +831,8 @@ impl State {
                     .position
                     .add(
                         direction,
-                        -((self.game.rules.bomb_offset * 100 / Position::PLAYER_POSITION_ACCURACY)
-                            as i32),
+                        -((self.game.settings.bomb_offset * 100
+                            / Position::PLAYER_POSITION_ACCURACY) as i32),
                     )
                     .unwrap_or(player_state.position),
                 None => player_state.position,
@@ -867,7 +865,7 @@ impl State {
                     player_state.current_bombs_placed += 1;
                     *cell = Cell::Bomb {
                         owner: player_id,
-                        expire: self.time + self.game.rules.bomb_explode_time(),
+                        expire: self.time + self.game.settings.bomb_explode_time(),
                         // GAME_RULE: power is set AFTER eating powerups at cell
                         power: player_state.power,
                     };
@@ -916,7 +914,7 @@ impl State {
             Cell::Upgrade(upgrade) => {
                 log::info!("{cell:?}: destroying {upgrade:?}");
 
-                (true, self.game.rules.upgrade_explosion_power, owner)
+                (true, self.game.settings.upgrade_explosion_power, owner)
             }
             Cell::Teleport => {
                 let explodes = if consider_tp {
@@ -943,11 +941,11 @@ impl State {
                 } else {
                     true
                 };
-                (explodes, self.game.rules.upgrade_explosion_power, owner)
+                (explodes, self.game.settings.upgrade_explosion_power, owner)
             }
             Cell::StartPoint | Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
             Cell::Wood => {
-                let expire = self.time + self.game.rules.wood_burn_time();
+                let expire = self.time + self.game.settings.wood_burn_time();
                 self.field[cell] = Cell::WoodBurning { expire };
                 log::info!("{cell:?}: setting wall on fire until {expire:?}");
                 (false, 0, owner)
@@ -956,7 +954,7 @@ impl State {
         if explodes {
             self.field[cell] = Cell::Fire {
                 owner,
-                expire: self.time + self.game.rules.fire_burn_time(),
+                expire: self.time + self.game.settings.fire_burn_time(),
             };
             for (id, p) in self.player_states.iter_mut().enumerate() {
                 if p.position.as_cell_pos() == cell {
@@ -1010,7 +1008,7 @@ impl State {
                     assert!(expire >= self.time);
                     if expire == self.time {
                         let r = random(self.time, cell_idx.x, cell_idx.y);
-                        *cell = self.game.rules.ratios.random(r);
+                        *cell = self.game.settings.ratios.random(r);
                     }
                 }
 
@@ -1075,7 +1073,7 @@ mod test {
 
     //TODO #[test]
     fn test_walking_distance() {
-        let r = Rules::default();
+        let r = Settings::default();
         assert_eq!(r.get_update_walk_distance(1), 4);
         assert_eq!(r.get_update_walk_distance(2), 4);
     }
@@ -1092,11 +1090,11 @@ mod test {
     fn game() -> State {
         let player1 = Player::new("test player 1".to_owned(), PlayerId(0), Position::new(0, 0));
         let local_player = player1.id;
-        let rules = Rules::default();
+        let settings = Settings::default();
         let game = Game {
             name: "Test Game".to_owned(),
             players: vec![player1],
-            rules,
+            settings,
             local_player,
         };
 
