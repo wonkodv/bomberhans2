@@ -25,7 +25,8 @@ TODOS
     *   Tombstones give powerup's that the player lost when dying
     *   Teleports explode All other TPs
     *   Hans gets tired and needs schinken to run
-    *
+    *   Eat Schinken to lose
+    *   Explode Schinken to lose (set owner of subsequent bomb explosion to fire owner, so B can set a bomb in Rang of A's and a Schinken to win)
 
 Client Server synchronization
 -----------------------------

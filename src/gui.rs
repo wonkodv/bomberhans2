@@ -19,10 +19,10 @@ use crate::game::Direction;
 use crate::game::Game;
 use crate::game::PlayerState;
 use crate::game::Position;
-use crate::game::Rules;
 use crate::game::State;
 use crate::game::TimeStamp;
 use crate::game::TICKS_PER_SECOND;
+use crate::rules::Rules;
 
 const PIXEL_PER_CELL: f32 = 42.0;
 
@@ -30,6 +30,16 @@ enum Step {
     Initial,
     Game(State),
     GameOver(String),
+}
+
+impl Step {
+    fn game_state(&mut self) -> &mut State {
+        if let Step::Game(state) = self {
+            state
+        } else {
+            panic!("no game running");
+        }
+    }
 }
 
 fn cell_rect(pos: CellPosition, offset: Pos2) -> egui::Rect {
@@ -49,7 +59,7 @@ fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
 
 pub fn gui() {
     let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(320.0, 240.0)),
+        initial_window_size: Some(egui::vec2(600.0, 600.0)),
         ..Default::default()
     };
     eframe::run_native(
@@ -157,21 +167,169 @@ impl MyApp {
     }
 
     fn update_initial(&mut self, ui: &mut egui::Ui) {
+        let textures = self.textures(ui.ctx());
+
+        ui.style_mut().spacing.slider_width = 300.0;
+
         if let Step::GameOver(ref s) = self.step {
-            ui.label(s);
+            ui.label(format!("GameOver: {s}"));
         }
-        ui.add(
-            egui::Slider::new(&mut self.rules.width, 7..=99)
-                .text("Width")
-                .clamp_to_range(true),
-        );
-        ui.add(
-            egui::Slider::new(&mut self.rules.height, 7..=99)
-                .text("Height")
-                .clamp_to_range(true),
-        );
-        ui.add(egui::Slider::new(&mut self.rules.players, 1..=4).text("Players"));
-        let button = ui.button("Start local Game");
+        ui.add(egui::TextEdit::singleline(&mut self.game_name))
+            .on_hover_text("Name of the Game");
+
+        let rules = &mut self.rules;
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.heading("Game Options");
+                ui.add(
+                    egui::Slider::new(&mut rules.width, Rules::WIDTH_RANGE)
+                        .text("Width")
+                        .clamp_to_range(true),
+                )
+                .on_hover_text("Width of the game field [cells]");
+                ui.add(
+                    egui::Slider::new(&mut rules.height, Rules::HEIGHT_RANGE)
+                        .text("Height")
+                        .clamp_to_range(true),
+                )
+                .on_hover_text("Height of the game field [cells]");
+                ui.add(
+                    egui::Slider::new(&mut rules.players, Rules::PLAYERS_RANGE)
+                        .text("Players")
+                        .clamp_to_range(true),
+                )
+                .on_hover_text("Number of players that can join this game");
+                ui.add(
+                    egui::Slider::new(&mut rules.bomb_explode_time_ms, Rules::BOMB_TIME_RANGE)
+                        .text("Bomb Time")
+                        .clamp_to_range(true),
+                )
+                .on_hover_text("Time between placing a bomb and its explosion [ms]");
+                ui.add(
+                    egui::Slider::new(&mut rules.speed_base, Rules::SPEED_BASE_RANGE)
+                        .text("Base Speed"),
+                )
+                .on_hover_text("Speed of the Player without any upgrades [Cells/s/100]");
+                ui.add(
+                    egui::Slider::new(&mut rules.speed_multiplyer, Rules::SPEED_MULTIPLYER_RANGE)
+                        .text("Speed Increase"),
+                )
+                .on_hover_text("Player speed increase per speed powerup [Cells/s/100]");
+                ui.add(
+                    egui::Slider::new(
+                        &mut rules.bomb_walking_chance,
+                        Rules::BOMB_WALKING_CHANCE_RANGE,
+                    )
+                    .text("Bomb Walking")
+                    .clamp_to_range(true),
+                )
+                .on_hover_text("Chance that a player can walk over a bomb in an update [%]");
+                ui.add(
+                    egui::Slider::new(
+                        &mut rules.tombstone_walking_chance,
+                        Rules::TOMBSTONE_WALKING_CHANCE_RANGE,
+                    )
+                    .text("Tombstone Walking")
+                    .clamp_to_range(true),
+                )
+                .on_hover_text("Chance that a player can walk over a tombstone in an update [%]");
+                ui.add(
+                    egui::Slider::new(
+                        &mut rules.upgrade_explosion_power,
+                        Rules::UPGRADE_EXPLOSION_POWER_RANGE,
+                    )
+                    .text("Upgrade Explosion"),
+                )
+                .on_hover_text("Explosion Range of ignited Powerups [cells]");
+                ui.add(
+                    egui::Slider::new(&mut rules.wood_burn_time_ms, Rules::WOOD_BURN_TIME_RANGE)
+                        .text("Wood Burn Time"),
+                )
+                .on_hover_text("Time that wood burns after igniting [ms]");
+                ui.add(
+                    egui::Slider::new(&mut rules.fire_burn_time_ms, Rules::FIRE_BURN_TIME_RANGE)
+                        .text("Fire Burn Time"),
+                )
+                .on_hover_text("Time that fire burns [ms]");
+                ui.add(
+                    egui::Slider::new(&mut rules.bomb_offset, Rules::BOMB_OFFSET_RANGE)
+                        .text("Bomb Placement Offset"),
+                )
+                .on_hover_text("While running, how far behind hans a bomb is placed [cells/100]");
+            });
+
+            ui.vertical(|ui| {
+                ui.heading("Ratios of cells that burned wood will turn into");
+                const RATIO_RANGE: std::ops::RangeInclusive<u32> =0..=50;
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut rules.ratios.power, RATIO_RANGE).text("Power Upgrade"),
+                    );
+                }). response.on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Slider::new(&mut rules.ratios.speed, RATIO_RANGE).text("Speed Upgrade"),
+                    );
+                }). response.on_hover_text("Consuming this will upgrade the player's walking speed");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Slider::new(&mut rules.ratios.bombs, RATIO_RANGE).text("Bomb Upgrade"));
+                }). response.on_hover_text("Consuming this will increase how many bombs the player can place simultaneously");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Slider::new(&mut rules.ratios.teleport, RATIO_RANGE).text("Teleport"));
+                }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Slider::new(&mut rules.ratios.wall, RATIO_RANGE).text("Wall"));
+                }). response.on_hover_text("Wall\nIf this happens too often, you will be stuck.");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Slider::new(&mut rules.ratios.wood, RATIO_RANGE).text("Wood"));
+                }). response.on_hover_text("Wood\nYou can try and explode again");
+                ui.horizontal(|ui| {
+                    ui.add(egui::Slider::new(&mut rules.ratios.clear, RATIO_RANGE).text("Empty Cell"));
+                }). response.on_hover_text("Just a boring empty Cell");
+            });
+
+
+            ui.vertical(|ui| {
+                ui.heading("effective Ratios");
+                let image_dims = egui::Vec2 { x: 16.0, y: 16.0 };
+                let percentages = rules.ratios.normalize();
+
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_upgrade_power"), image_dims);
+                    ui.label(format!("{}%", percentages.power));
+                }). response.on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_upgrade_speed"), image_dims);
+                    ui.label(format!("{}%", percentages.speed));
+                }). response.on_hover_text("Consuming this will upgrade the player's walking speed");
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_upgrade_bomb"), image_dims);
+                    ui.label(format!("{}%", percentages.bombs));
+                }). response.on_hover_text("Consuming this will increase how many bombs the player can place simultaneously");
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_teleport"), image_dims);
+                    ui.label(format!("{}%", percentages.teleport));
+                }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_wall"), image_dims);
+                    ui.label(format!("{}%", percentages.wall));
+                }). response.on_hover_text("Wall\nIf this happens too often, you will be stuck.");
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_wood"), image_dims);
+                    ui.label(format!("{}%", percentages.wood));
+                }). response.on_hover_text("Wood\nYou can try and explode again");
+                ui.horizontal(|ui| {
+                    ui.image(textures.get_texture("cell_empty"), image_dims);
+                    ui.label(format!("{}%", percentages.clear));
+                }). response.on_hover_text("Just a boring empty Cell");
+            });
+
+
+        });
+
+        let button = ui
+            .button("Start local Game")
+            .on_hover_text("Start a local Game without network players");
         let mut memory = ui.memory();
         if memory.focus().is_none() {
             memory.request_focus(button.id); // TODO: this flickers
@@ -192,9 +350,7 @@ impl MyApp {
     }
 
     fn update_game_simulation(&mut self) {
-        let Step::Game(ref mut game_state) = self.step else {
-            unreachable!();
-        };
+        let game_state: &mut State = self.step.game_state();
 
         let now = Instant::now();
         let duration = now - self.last_frame;
@@ -206,9 +362,7 @@ impl MyApp {
         }
     }
     fn update_game_inputs(&mut self, ui: &mut egui::Ui) {
-        let Step::Game(ref mut game_state) = self.step else {
-            unreachable!();
-        };
+        let game_state: &mut State = self.step.game_state();
 
         for (key, direction) in [
             (egui::Key::W, Direction::North),
@@ -231,9 +385,25 @@ impl MyApp {
 
     fn update_game_draw(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
-        let Step::Game(ref mut game_state) = self.step else {
-            unreachable!();
+
+        if ui
+            .horizontal(|ui| {
+                ui.label(&self.step.game_state().game.name);
+                let button = ui.button("Stop Game");
+                if button.clicked() {
+                    self.step = Step::GameOver("You pressed Stop".to_owned());
+                    true
+                } else {
+                    false
+                }
+            })
+            .inner
+        {
+            return;
         };
+
+        let step = &mut self.step;
+        let game_state: &mut State = step.game_state();
 
         let width = game_state.game.rules.width as f32 * PIXEL_PER_CELL;
         let height = game_state.game.rules.height as f32 * PIXEL_PER_CELL;
