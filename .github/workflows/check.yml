@@ -1,11 +1,8 @@
-name: Release
+name: Check
 on:
   push:
     branches:
       - main
-    paths:
-      - '**.rs'
-      - 'Cargo.*'
 defaults:
   run:
     shell: bash
