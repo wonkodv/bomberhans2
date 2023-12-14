@@ -1,3 +1,4 @@
+use crate::rules::Rules;
 use crate::utils::Idx;
 use std::fmt;
 use std::ops::Index;
@@ -47,10 +48,13 @@ impl Duration {
         Self { ticks }
     }
 
-    pub fn from_seconds(seconds: f32) -> Self {
-        Self {
-            ticks: (seconds * TICKS_PER_SECOND as f32) as u32,
-        }
+    pub fn from_ms(milliseconds: u32) -> Self {
+        let ticks = if milliseconds == 0 {
+            0
+        } else {
+            u32::max(1, (milliseconds * TICKS_PER_SECOND + 499) / 1000)
+        };
+        Self { ticks }
     }
     pub fn ticks(self) -> u32 {
         self.ticks
@@ -169,146 +173,6 @@ impl Position {
     }
 }
 
-/// Ratios of Wood turning into those cell types:
-#[derive(Debug, Clone)]
-pub struct Ratios {
-    power: u8,
-    speed: u8,
-    bombs: u8,
-    teleport: u8,
-    wall: u8,
-    clear: u8,
-}
-
-impl Default for Ratios {
-    fn default() -> Self {
-        Self::new(8, 9, 7, 1, 1, 20)
-    }
-}
-
-impl Ratios {
-    pub fn new(power: u8, speed: u8, bombs: u8, teleport: u8, wall: u8, clear: u8) -> Self {
-        Self {
-            power,
-            speed,
-            bombs,
-            teleport,
-            wall,
-            clear,
-        }
-    }
-
-    fn generate(&self, random: u32) -> Cell {
-        let sum: u8 = self.power + self.speed + self.bombs + self.teleport + self.wall + self.clear;
-
-        let mut random: u8 = (random % (u32::from(sum)))
-            .try_into()
-            .expect("random % sum fits");
-
-        if random < self.power {
-            return Cell::Upgrade(Upgrade::Power);
-        }
-        random -= self.power;
-
-        if random < self.speed {
-            return Cell::Upgrade(Upgrade::Speed);
-        }
-        random -= self.speed;
-
-        if random < self.bombs {
-            return Cell::Upgrade(Upgrade::Bombs);
-        }
-        random -= self.bombs;
-
-        if random < self.teleport {
-            return Cell::Teleport;
-        }
-        random -= self.teleport;
-
-        if random < self.wall {
-            return Cell::Wall;
-        }
-        random -= self.wall;
-
-        assert!(random < self.clear);
-        Cell::Empty
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Rules {
-    // field width
-    pub width: u32,
-
-    // field width
-    pub height: u32,
-
-    pub players: u32,
-
-    /// Ratios what comes out of burned down walls
-    pub ratios: Ratios,
-
-    /// how far behind the player the bomb is placed [cell/100]
-    pub bomb_offset: i32,
-
-    /// time after bomb placement that the bomb explodes
-    pub bomb_time: Duration,
-
-    /// player walking speed at initial upgrade [cells/100/s]
-    pub speed_multiplyer: u32,
-
-    /// player walking speed upgrade start value [cells/100/s]
-    pub speed_offset: u32,
-
-    /// percentage that walking on bomb succeeds each update
-    pub bomb_walking_chance: u8,
-
-    /// percentage that walking on tombstone succeeds each update
-    pub tombstone_walking_chance: u8,
-
-    /// Power of Upgrade Paackets exploding
-    pub upgrade_explosion_power: u8,
-
-    /// how long before burning wood turns into something
-    pub wood_burn_time: Duration,
-
-    /// how long fire burns
-    pub fire_burn_time: Duration,
-}
-
-impl Default for Rules {
-    fn default() -> Self {
-        Rules {
-            width: 17,
-            height: 13,
-            players: 4,
-            ratios: Ratios::default(),
-            bomb_offset: 35,
-            bomb_time: Duration::from_seconds(2.0),
-            speed_multiplyer: 130,
-            speed_offset: 700,
-            bomb_walking_chance: 80,
-            tombstone_walking_chance: 40,
-            upgrade_explosion_power: 1,
-            wood_burn_time: Duration::from_seconds(1.0),
-            fire_burn_time: Duration::from_seconds(0.5),
-        }
-    }
-}
-
-impl Rules {
-    /// Walking Speed based on `speed_powerup`
-    /// returned speed is returned in `(Cell×TICKS_PER_SECOND)/(PLAYER_POSITION_ACCURACY×s)`
-    /// so a speed of 1 is 60/100 cells/s
-    ///
-    /// Speed of input variables is Cells/100s
-    fn get_update_walk_distance(&self, player_speed: u8) -> u32 {
-        (self.speed_offset + (u32::from(player_speed) * self.speed_multiplyer)) * TICKS_PER_SECOND
-            / Position::PLAYER_POSITION_ACCURACY
-            / 100
-    }
-}
-
 fn random(time: TimeStamp, r1: u32, r2: u32) -> u32 {
     let mut x: u32 = 42;
     for i in [time.ticks_from_start(), r1, r2] {
@@ -370,16 +234,16 @@ pub struct PlayerState {
     pub kills: u32,
 
     /// current bomb power upgrades
-    pub power: u8,
+    pub power: u32,
 
     /// current walking speed upgrades
-    pub speed: u8,
+    pub speed: u32,
 
     /// current bomb capacity upgrades
-    pub bombs: u8,
+    pub bombs: u32,
 
     /// current placed bombs. Increased when placing, decreased when exploding.
-    pub current_bombs_placed: u8,
+    pub current_bombs_placed: u32,
 
     /// currently walking or placing?
     pub action: Action,
@@ -414,9 +278,9 @@ impl PlayerState {
     }
 
     fn die(&mut self, _killed_by: PlayerId, start_position: Position) {
-        self.power = u8::max(1, self.power / 2);
-        self.speed = u8::max(1, self.speed / 2);
-        self.bombs = u8::max(1, self.bombs / 2);
+        self.power = u32::max(1, self.power / 2);
+        self.speed = u32::max(1, self.speed / 2);
+        self.bombs = u32::max(1, self.bombs / 2);
         self.position = start_position;
         self.action = Action::idle();
     }
@@ -432,7 +296,7 @@ pub enum Cell {
     Empty,
     Bomb {
         owner: PlayerId,
-        power: u8,
+        power: u32,
         expire: TimeStamp,
     },
     Fire {
@@ -954,7 +818,11 @@ impl State {
             let position = match player_state.action.walking {
                 Some(direction) => player_state
                     .position
-                    .add(direction, -self.game.rules.bomb_offset)
+                    .add(
+                        direction,
+                        -((self.game.rules.bomb_offset * 100 / Position::PLAYER_POSITION_ACCURACY)
+                            as i32),
+                    )
                     .unwrap_or(player_state.position),
                 None => player_state.position,
             };
@@ -986,7 +854,7 @@ impl State {
                     player_state.current_bombs_placed += 1;
                     *cell = Cell::Bomb {
                         owner: player_id,
-                        expire: self.time + self.game.rules.bomb_time,
+                        expire: self.time + self.game.rules.bomb_explode_time(),
                         // GAME_RULE: power is set AFTER eating powerups at cell
                         power: player_state.power,
                     };
@@ -1066,7 +934,7 @@ impl State {
             }
             Cell::StartPoint | Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
             Cell::Wood => {
-                let expire = self.time + self.game.rules.wood_burn_time;
+                let expire = self.time + self.game.rules.wood_burn_time();
                 self.field[cell] = Cell::WoodBurning { expire };
                 log::info!("{cell:?}: setting wall on fire until {expire:?}");
                 (false, 0, owner)
@@ -1075,7 +943,7 @@ impl State {
         if explodes {
             self.field[cell] = Cell::Fire {
                 owner,
-                expire: self.time + self.game.rules.fire_burn_time,
+                expire: self.time + self.game.rules.fire_burn_time(),
             };
             for (id, p) in self.player_states.iter_mut().enumerate() {
                 if p.position.as_cell_pos() == cell {
@@ -1084,7 +952,7 @@ impl State {
                 }
             }
 
-            let power: isize = power.into();
+            let power: isize = power.try_into().expect("power fits");
             if power > 0 {
                 let x = cell.x as isize;
                 let y = cell.y as isize;
@@ -1129,7 +997,7 @@ impl State {
                     assert!(expire >= self.time);
                     if expire == self.time {
                         let r = random(self.time, cell_idx.x, cell_idx.y);
-                        *cell = self.game.rules.ratios.generate(r);
+                        *cell = self.game.rules.ratios.random(r);
                     }
                 }
 
@@ -1299,7 +1167,7 @@ mod test {
 
     #[test]
     fn test_field_from_string() {
-        let expected = " 
+        let expected = "
             O_+++++++_O
             _#+#+#+#+#_
             spb++++++++

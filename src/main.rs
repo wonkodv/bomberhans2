@@ -1,7 +1,9 @@
 mod game;
 mod gui;
 mod network;
+mod rules;
 mod utils;
+
 use std::io::Write;
 fn main() {
     env_logger::Builder::from_default_env()
