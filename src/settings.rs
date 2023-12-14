@@ -219,9 +219,13 @@ impl Settings {
     ///
     /// Speed of input variables is Cells/100s
     pub fn get_update_walk_distance(&self, player_speed: u32) -> u32 {
-        (self.speed_base + (player_speed * self.speed_multiplyer)) * TICKS_PER_SECOND
-            / Position::PLAYER_POSITION_ACCURACY
-            / 100
+        // GAME_RULE: Player Speed is capped at 1 Cell / Update
+        u32::min(
+            (self.speed_base + (player_speed * self.speed_multiplyer)) * TICKS_PER_SECOND
+                / Position::ACCURACY as u32
+                / 100,
+            Position::ACCURACY as u32,
+        )
     }
 
     pub fn bomb_explode_time(&self) -> Duration {
@@ -232,5 +236,29 @@ impl Settings {
     }
     pub fn fire_burn_time(&self) -> Duration {
         Duration::from_ms(self.fire_burn_time_ms)
+    }
+}
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_ratios() {
+        let r = Ratios::new(2, 2, 2, 2, 2, 2, 2);
+
+        assert_eq!(Cell::Upgrade(Upgrade::Power), r.random(0));
+        assert_eq!(Cell::Upgrade(Upgrade::Power), r.random(1));
+        assert_eq!(Cell::Upgrade(Upgrade::Speed), r.random(2));
+        assert_eq!(Cell::Upgrade(Upgrade::Speed), r.random(3));
+        assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.random(4));
+        assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.random(5));
+        assert_eq!(Cell::Teleport, r.random(6));
+        assert_eq!(Cell::Teleport, r.random(7));
+        assert_eq!(Cell::Wood, r.random(8));
+        assert_eq!(Cell::Wood, r.random(9));
+        assert_eq!(Cell::Wall, r.random(10));
+        assert_eq!(Cell::Wall, r.random(11));
+        assert_eq!(Cell::Empty, r.random(12));
+        assert_eq!(Cell::Empty, r.random(13));
     }
 }

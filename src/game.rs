@@ -84,6 +84,25 @@ pub enum Direction {
     East,
 }
 
+impl Direction {
+    fn left(self) -> Self {
+        match self {
+            Direction::North => Direction::West,
+            Direction::West => Direction::South,
+            Direction::South => Direction::East,
+            Direction::East => Direction::North,
+        }
+    }
+    fn right(self) -> Self {
+        match self {
+            Direction::North => Direction::East,
+            Direction::West => Direction::North,
+            Direction::South => Direction::West,
+            Direction::East => Direction::South,
+        }
+    }
+}
+
 impl fmt::Debug for Direction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -98,24 +117,25 @@ impl fmt::Debug for Direction {
 /// Index of a cell
 #[derive(Copy, Clone, PartialEq)]
 pub struct CellPosition {
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
 }
 
 impl CellPosition {
-    fn new(x: u32, y: u32) -> Self {
+    fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
 
-    /// Distance if in line of fire
-    fn fire_distance(self, other: Self) -> Option<u32> {
-        if self.x == other.x {
-            Some(self.y.abs_diff(other.y))
-        } else if self.y == other.y {
-            Some(self.x.abs_diff(other.x))
-        } else {
-            None
-        }
+    /// move position `distance` into  `direction`
+    fn add(self, direction: Direction, distance: i32) -> Self {
+        let Self { x, y } = self;
+        let (x, y) = match direction {
+            Direction::North => (x, y - distance),
+            Direction::West => (x - distance, y),
+            Direction::South => (x, y + distance),
+            Direction::East => (x + distance, y),
+        };
+        Self::new(x, y)
     }
 }
 
@@ -128,8 +148,8 @@ impl fmt::Debug for CellPosition {
 /// Player positions
 #[derive(Copy, Clone, PartialEq)]
 pub struct Position {
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
 }
 
 impl fmt::Debug for Position {
@@ -140,42 +160,51 @@ impl fmt::Debug for Position {
 
 impl Position {
     /// Player position is tracked in this many fractions of a cell
-    pub const PLAYER_POSITION_ACCURACY: u32 = 100;
+    pub const ACCURACY: i32 = 100;
 
-    fn new(x: u32, y: u32) -> Self {
+    fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
 
     /// move position `distance` into  `direction`
-    fn add(self, direction: Direction, distance: i32) -> Option<Self> {
+    fn add(self, direction: Direction, distance: i32) -> Self {
         let Self { x, y } = self;
         let (x, y) = match direction {
-            Direction::North => (x, y.checked_add_signed(-distance)?),
-            Direction::West => (x.checked_add_signed(-distance)?, y),
-            Direction::South => (x, y.checked_add_signed(distance)?),
-            Direction::East => (x.checked_add_signed(distance)?, y),
+            Direction::North => (x, y - distance),
+            Direction::West => (x - distance, y),
+            Direction::South => (x, y + distance),
+            Direction::East => (x + distance, y),
         };
-        Some(Self::new(x, y))
+        Self::new(x, y)
     }
 
     fn as_cell_pos(self) -> CellPosition {
         CellPosition {
-            x: self.x / Self::PLAYER_POSITION_ACCURACY,
-            y: self.y / Self::PLAYER_POSITION_ACCURACY,
+            x: self.x / Self::ACCURACY,
+            y: self.y / Self::ACCURACY,
         }
     }
 
     fn from_cell_position(p: CellPosition) -> Self {
         Self {
-            x: p.x * Self::PLAYER_POSITION_ACCURACY + Self::PLAYER_POSITION_ACCURACY / 2,
-            y: p.y * Self::PLAYER_POSITION_ACCURACY + Self::PLAYER_POSITION_ACCURACY / 2,
+            x: p.x * Self::ACCURACY + Self::ACCURACY / 2,
+            y: p.y * Self::ACCURACY + Self::ACCURACY / 2,
+        }
+    }
+
+    fn distance_to_border(self, direction: Direction) -> i32 {
+        match direction {
+            Direction::North => self.y % Position::ACCURACY,
+            Direction::South => 100 - self.y % Position::ACCURACY,
+            Direction::West => self.x % Position::ACCURACY,
+            Direction::East => 100 - self.x % Position::ACCURACY,
         }
     }
 }
 
-fn random(time: TimeStamp, r1: u32, r2: u32) -> u32 {
+fn random(time: TimeStamp, r1: i32, r2: i32) -> u32 {
     let mut x: u32 = 42;
-    for i in [time.ticks_from_start(), r1, r2] {
+    for i in [time.ticks_from_start(), r1 as u32, r2 as u32] {
         for b in i.to_le_bytes() {
             x = x.overflowing_add(b.into()).0.overflowing_mul(31).0;
         }
@@ -380,6 +409,21 @@ impl Cell {
             Cell::WoodBurning { .. } => "wood_burning",
         }
     }
+
+    pub fn walkable(&self) -> bool {
+        match *self {
+            Cell::Empty => true,
+            Cell::Bomb { .. } => true,
+            Cell::Fire { .. } => true,
+            Cell::TombStone(..) => true,
+            Cell::Upgrade(upgrade) => true,
+            Cell::Teleport => true,
+            Cell::StartPoint => true,
+            Cell::Wall => false,
+            Cell::Wood => false,
+            Cell::WoodBurning { .. } => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -422,13 +466,13 @@ impl Field {
     }
 
     pub fn is_cell_in_field(&self, cell: CellPosition) -> bool {
-        cell.x < self.width && cell.y < self.height
+        cell.x >= 0 && cell.y >= 0 && cell.x < self.width as i32 && cell.y < self.height as i32
     }
 
     pub fn string_grid(&self) -> String {
         let mut s = String::new();
-        for y in 0..self.height {
-            for x in 0..self.width {
+        for y in 0..self.height as i32 {
+            for x in 0..self.width as i32 {
                 let cell = &self[CellPosition::new(x, y)];
                 s.push(cell.to_char());
             }
@@ -483,7 +527,8 @@ impl Field {
 
     pub fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
         let height = self.height;
-        (0..self.width).flat_map(move |x| (0..height).map(move |y| CellPosition::new(x, y)))
+        (0..self.width as i32)
+            .flat_map(move |x| (0..height as i32).map(move |y| CellPosition::new(x, y)))
     }
 
     pub fn start_positions(&self) -> Vec<CellPosition> {
@@ -504,9 +549,10 @@ impl Index<CellPosition> for Field {
 
     fn index(&self, index: CellPosition) -> &Self::Output {
         if self.is_cell_in_field(index) {
-            &self.cells[usize::try_from(index.y * self.width + index.x).expect("index fits usize")]
+            &self.cells
+                [usize::try_from(index.y * self.width as i32 + index.x).expect("index fits usize")]
         } else {
-            panic!("y > height: {} > {}", index.y, self.height)
+            &Cell::Wall
         }
     }
 }
@@ -515,7 +561,7 @@ impl IndexMut<CellPosition> for Field {
     fn index_mut(&mut self, index: CellPosition) -> &mut Self::Output {
         if self.is_cell_in_field(index) {
             &mut self.cells
-                [usize::try_from(index.y * self.width + index.x).expect("index fits usize")]
+                [usize::try_from(index.y * self.width as i32 + index.x).expect("index fits usize")]
         } else {
             panic!("y > height: {} > {}", index.y, self.height)
         }
@@ -678,33 +724,33 @@ impl State {
             .walking
             .expect("only call walking if player is walking");
 
-        let new_position = player_state.position.add(
-            direction,
-            self.game
-                .settings
-                .get_update_walk_distance(player_state.speed)
-                .try_into()
-                .expect("walked distance fits i32"),
-        );
+        let mut walk_distance = self
+            .game
+            .settings
+            .get_update_walk_distance(player_state.speed)
+            .try_into()
+            .expect("walked distance fits i32");
 
-        if let Some(mut new_position) = new_position {
-            let smothing_axis = match direction {
-                Direction::North | Direction::South => &mut new_position.x,
-                Direction::West | Direction::East => &mut new_position.y,
-            };
-            *smothing_axis = *smothing_axis / Position::PLAYER_POSITION_ACCURACY
-                * Position::PLAYER_POSITION_ACCURACY
-                + u32::max(
-                    u32::min(
-                        *smothing_axis % Position::PLAYER_POSITION_ACCURACY,
-                        Position::PLAYER_POSITION_ACCURACY * 4 / 5,
-                    ),
-                    Position::PLAYER_POSITION_ACCURACY / 5,
-                );
-            let cell_position = new_position.as_cell_pos();
-            if self.field.is_cell_in_field(new_position.as_cell_pos()) {
-                self.walk_on_cell(player_id, new_position);
+        let current_cell_pos = player_state.position.as_cell_pos();
+        let cell_ahead = &self.field[current_cell_pos.add(direction, 1)];
+        let cell_ahead_left =
+            &self.field[current_cell_pos.add(direction, 1).add(direction.left(), 1)];
+        let cell_ahead_right =
+            &self.field[current_cell_pos.add(direction, 1).add(direction.right(), 1)];
+
+        if cell_ahead.walkable() {
+            if !cell_ahead_left.walkable() {
+                // TODO: move away from left wall by distance_to_border - ACC/5
             }
+        } else {
+            let distance_to_wall =
+                player_state.position.distance_to_border(direction) - (Position::ACCURACY / 5);
+            walk_distance = i32::min(distance_to_wall, walk_distance);
+        }
+
+        if walk_distance > 0 {
+            let new_position = player_state.position.add(direction, walk_distance);
+            self.walk_on_cell(player_id, new_position);
         }
     }
 
@@ -827,14 +873,10 @@ impl State {
             );
         } else {
             let position = match player_state.action.walking {
-                Some(direction) => player_state
-                    .position
-                    .add(
-                        direction,
-                        -((self.game.settings.bomb_offset * 100
-                            / Position::PLAYER_POSITION_ACCURACY) as i32),
-                    )
-                    .unwrap_or(player_state.position),
+                Some(direction) => player_state.position.add(
+                    direction,
+                    -(self.game.settings.bomb_offset as i32 * 100 / Position::ACCURACY),
+                ),
                 None => player_state.position,
             };
 
@@ -972,7 +1014,7 @@ impl State {
                         let x = x + dx * i;
                         let y = y + dy * i;
                         if x >= 0 && y >= 0 {
-                            let pos = CellPosition::new(x as u32, y as u32);
+                            let pos = CellPosition::new(x as i32, y as i32);
                             if self.field.is_cell_in_field(pos)
                                 && !self.set_on_fire(pos, owner, true)
                             {
@@ -1032,50 +1074,39 @@ mod test {
     fn test_player_coord_add() {
         let p = Position { x: 100, y: 100 };
 
-        assert_eq!(p.add(Direction::North, 101), None);
+        assert_eq!(p.add(Direction::North, 101), Position { x: 100, y: -1 });
 
-        assert_eq!(
-            p.add(Direction::North, 10),
-            Some(Position { x: 100, y: 90 })
-        );
-        assert_eq!(
-            p.add(Direction::South, 10),
-            Some(Position { x: 100, y: 110 })
-        );
-        assert_eq!(p.add(Direction::West, 10), Some(Position { x: 90, y: 100 }));
-        assert_eq!(
-            p.add(Direction::East, 10),
-            Some(Position { x: 110, y: 100 })
-        );
+        assert_eq!(p.add(Direction::North, 10), Position { x: 100, y: 90 });
+        assert_eq!(p.add(Direction::South, 10), (Position { x: 100, y: 110 }));
+        assert_eq!(p.add(Direction::West, 10), (Position { x: 90, y: 100 }));
+        assert_eq!(p.add(Direction::East, 10), (Position { x: 110, y: 100 }));
+
+        assert_eq!(p.add(Direction::North, -10), (Position { x: 100, y: 110 }));
+        assert_eq!(p.add(Direction::South, -10), (Position { x: 100, y: 90 }));
+        assert_eq!(p.add(Direction::West, -10), (Position { x: 110, y: 100 }));
+        assert_eq!(p.add(Direction::East, -10), (Position { x: 90, y: 100 }));
     }
 
     #[test]
-    fn test_player_coord_sub() {
-        let p = Position { x: 100, y: 100 };
+    fn test_position_distance_to_border() {
+        let pos = Position { x: 117, y: 501 };
+        assert_eq!(pos.distance_to_border(Direction::North), 1);
+        assert_eq!(pos.distance_to_border(Direction::South), 99);
+        assert_eq!(pos.distance_to_border(Direction::West), 17);
+        assert_eq!(pos.distance_to_border(Direction::East), 83);
 
-        assert_eq!(
-            p.add(Direction::North, -10),
-            Some(Position { x: 100, y: 110 })
-        );
-        assert_eq!(
-            p.add(Direction::South, -10),
-            Some(Position { x: 100, y: 90 })
-        );
-        assert_eq!(
-            p.add(Direction::West, -10),
-            Some(Position { x: 110, y: 100 })
-        );
-        assert_eq!(
-            p.add(Direction::East, -10),
-            Some(Position { x: 90, y: 100 })
-        );
+        let pos = Position { x: 552, y: 961 };
+        assert_eq!(pos.distance_to_border(Direction::North), 61);
+        assert_eq!(pos.distance_to_border(Direction::South), 39);
+        assert_eq!(pos.distance_to_border(Direction::West), 52);
+        assert_eq!(pos.distance_to_border(Direction::East), 48);
     }
 
-    //TODO #[test]
+    #[test]
     fn test_walking_distance() {
         let r = Settings::default();
         assert_eq!(r.get_update_walk_distance(1), 4);
-        assert_eq!(r.get_update_walk_distance(2), 4);
+        assert_eq!(r.get_update_walk_distance(2), 5);
     }
 
     #[test]
@@ -1092,7 +1123,6 @@ mod test {
         let local_player = player1.id;
         let settings = Settings::default();
         let game = Game {
-            name: "Test Game".to_owned(),
             players: vec![player1],
             settings,
             local_player,
@@ -1105,24 +1135,6 @@ mod test {
                                                        // underrun. If a test cares, it should set
                                                        // this correctly
         gs
-    }
-
-    #[test]
-    fn test_ratios() {
-        let r = Ratios::new(2, 2, 2, 2, 2, 2);
-
-        assert_eq!(Cell::Upgrade(Upgrade::Power), r.generate(000));
-        assert_eq!(Cell::Upgrade(Upgrade::Power), r.generate(001));
-        assert_eq!(Cell::Upgrade(Upgrade::Speed), r.generate(002));
-        assert_eq!(Cell::Upgrade(Upgrade::Speed), r.generate(003));
-        assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.generate(004));
-        assert_eq!(Cell::Upgrade(Upgrade::Bombs), r.generate(005));
-        assert_eq!(Cell::Teleport, r.generate(006));
-        assert_eq!(Cell::Teleport, r.generate(007));
-        assert_eq!(Cell::Wall, r.generate(008));
-        assert_eq!(Cell::Wall, r.generate(009));
-        assert_eq!(Cell::Empty, r.generate(010));
-        assert_eq!(Cell::Empty, r.generate(011));
     }
 
     #[test]
