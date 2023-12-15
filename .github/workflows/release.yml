@@ -28,16 +28,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Install Toolchain
-        run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - name: Build
-        run:  cargo build --release --verbose
       - name: Get Tag Version
         id: version
         run: |
           git fetch --depth=1 --tags
-          echo "VERSION=$(git describe --tags --match 'v*')" | tee -a "$GITHUB_OUTPUT"
+          VERSION=$(git describe --tags --match 'v*')
+          echo "VERSION=${VERSION}" | tee -a "$GITHUB_OUTPUT"
           echo "DELIVERY=bomberhans2-${{ matrix.os }}-${VERSION}" | tee -a "$GITHUB_OUTPUT"
+      - name: Install Toolchain
+        run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: Build
+        run:  cargo build --release --verbose
       - name: Prepare Delivery
         run: |
           mkdir ${{ steps.version.outputs.DELIVERY }}/
