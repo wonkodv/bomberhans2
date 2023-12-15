@@ -16,4 +16,9 @@ fn main() {
         println!("cargo:warning=expected git-version {git_version:?} to match cargo-version {cargo_version:?}");
     }
     println!("cargo:rustc-env=VERSION={git_version}");
+
+    let output = Command::new("touch")
+        .arg("build.rs")
+        .spawn()
+        .expect("can start touch");
 }
