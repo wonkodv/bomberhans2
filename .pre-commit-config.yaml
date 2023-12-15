@@ -5,7 +5,7 @@ repos:
     - id: check
       name: check
       description: check for warnings
-      entry: touch build.rs && cargo check
+      entry: cargo check
       language: system
       files: \.rs$|^Cargo\.
       stages: ["commit"]
@@ -28,7 +28,7 @@ repos:
       pass_filenames: false
     - id: build
       name: build
-      entry: touch build.rs && cargo build
+      entry: cargo build
       language: system
       stages: ["push"]
       pass_filenames: false
