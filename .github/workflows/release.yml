@@ -43,8 +43,8 @@ jobs:
         run: |
           mkdir ${{ steps.version.outputs.DELIVERY }}/
           mv target/release/bomberhans2${{ matrix.ext }} ${{ steps.version.outputs.DELIVERY }}/
-          zip ${{ steps.version.outputs.DELIVERY }}.zip  ${{ steps.version.outputs.DELIVERY }}
+          tar czf ${{ steps.version.outputs.DELIVERY }}.tar.gz  ${{ steps.version.outputs.DELIVERY }}
       - name: Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         with:
-          files:  ${{ steps.version.outputs.DELIVERY }}.zip
+          files:  ${{ steps.version.outputs.DELIVERY }}.tar.gz
