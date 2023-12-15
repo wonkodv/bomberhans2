@@ -28,22 +28,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Install Toolchain
-        run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - name: Build
-        run:  cargo build --release --verbose
       - name: Get Tag Version
         id: version
         run: |
           git fetch --depth=1 --tags
-          echo "VERSION=$(git describe --tags --match 'v*')" | tee -a "$GITHUB_OUTPUT"
+          VERSION=$(git describe --tags --match 'v*')
+          echo "VERSION=${VERSION}" | tee -a "$GITHUB_OUTPUT"
           echo "DELIVERY=bomberhans2-${{ matrix.os }}-${VERSION}" | tee -a "$GITHUB_OUTPUT"
+      - name: Install Toolchain
+        run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - name: Build
+        run:  cargo build --release --verbose
       - name: Prepare Delivery
         run: |
           mkdir ${{ steps.version.outputs.DELIVERY }}/
           mv target/release/bomberhans2${{ matrix.ext }} ${{ steps.version.outputs.DELIVERY }}/
-          tar czf  ${{ steps.version.outputs.DELIVERY }}  ${{ steps.version.outputs.DELIVERY }}.tar.gz
+          zip ${{ steps.version.outputs.DELIVERY }}.zip  ${{ steps.version.outputs.DELIVERY }}
       - name: Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         with:
-          files:  ${{ steps.version.outputs.DELIVERY }}.tar.gz
+          files:  ${{ steps.version.outputs.DELIVERY }}.zip
