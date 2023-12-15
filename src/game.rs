@@ -531,6 +531,16 @@ impl Field {
             .flat_map(move |x| (0..height as i32).map(move |y| CellPosition::new(x, y)))
     }
 
+    pub fn iter_with_border(&self) -> impl Iterator<Item = (CellPosition, &Cell)> {
+        self.iter_indices_with_border()
+            .map(move |pos| (pos, &self[pos]))
+    }
+    pub fn iter_indices_with_border(&self) -> impl Iterator<Item = CellPosition> {
+        let height = self.height;
+        (-1..(self.width + 1) as i32)
+            .flat_map(move |x| (-1..(height + 1) as i32).map(move |y| CellPosition::new(x, y)))
+    }
+
     pub fn start_positions(&self) -> Vec<CellPosition> {
         self.iter()
             .filter_map(|(pos, cell)| {

@@ -10,7 +10,7 @@ Bomberhans
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/wonkodv/bomberhans2)
 ![GitHub watchers](https://img.shields.io/github/watchers/wonkodv/bomberhans2)
 
-![screenshot](screenshot.png)
+![screenshot](etc/screenshot.png)
 
 
 

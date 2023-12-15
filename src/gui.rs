@@ -43,15 +43,15 @@ impl Step {
 }
 
 fn cell_rect(pos: CellPosition, offset: Pos2) -> egui::Rect {
-    let x = pos.x as f32 * PIXEL_PER_CELL + offset.x;
-    let y = pos.y as f32 * PIXEL_PER_CELL + offset.y;
+    let x = (pos.x + 1) as f32 * PIXEL_PER_CELL + offset.x;
+    let y = (pos.y + 1) as f32 * PIXEL_PER_CELL + offset.y;
 
     Rect::from_min_max(pos2(x, y), pos2(x + PIXEL_PER_CELL, y + PIXEL_PER_CELL))
 }
 
 fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
-    let x = pos.x as f32 / Position::ACCURACY as f32 * PIXEL_PER_CELL + offset.x;
-    let y = (pos.y as f32 / Position::ACCURACY as f32 - 0.2) * PIXEL_PER_CELL + offset.y;
+    let x = (pos.x as f32 / Position::ACCURACY as f32 + 1.0) * PIXEL_PER_CELL + offset.x;
+    let y = (pos.y as f32 / Position::ACCURACY as f32 - 0.2 + 1.0) * PIXEL_PER_CELL + offset.y;
     let p = PIXEL_PER_CELL / 2.0;
 
     Rect::from_min_max(pos2(x - p, y - p), pos2(x + p, y + p))
@@ -435,8 +435,8 @@ impl MyApp {
         let step = &mut self.step;
         let game_state = step.game_state();
 
-        let width = game_state.game.settings.width as f32 * PIXEL_PER_CELL;
-        let height = game_state.game.settings.height as f32 * PIXEL_PER_CELL;
+        let width = (game_state.game.settings.width + 2) as f32 * PIXEL_PER_CELL;
+        let height = (game_state.game.settings.height + 2) as f32 * PIXEL_PER_CELL;
 
         let game_field = ui.image(
             textures.get_texture("background"),
@@ -457,7 +457,7 @@ impl MyApp {
             },
         );
 
-        painter.extend(game_state.field.iter().map(|(pos, cell)| {
+        painter.extend(game_state.field.iter_with_border().map(|(pos, cell)| {
             Shape::image(
                 textures.get_cell(cell),
                 cell_rect(pos, game_field.rect.min),
