@@ -31,7 +31,7 @@ jobs:
       - name: Get Tag Version
         id: version
         run: |
-          git fetch --depth=1 --tags
+          git fetch --depth=1 --tags --force
           VERSION=$(git describe --tags --match 'v*')
           echo "VERSION=${VERSION}" | tee -a "$GITHUB_OUTPUT"
           echo "DELIVERY=bomberhans2-${{ matrix.os }}-${VERSION}" | tee -a "$GITHUB_OUTPUT"
