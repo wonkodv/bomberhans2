@@ -206,19 +206,27 @@ impl MyApp {
                 )
                 .on_hover_text("Number of players that can join this game");
                 ui.add(
-                    egui::Slider::new(&mut settings.bomb_explode_time_ms, Settings::BOMB_TIME_RANGE)
-                        .text("Bomb Time")
-                        .clamp_to_range(true),
+                    egui::Slider::new(
+                        &mut settings.bomb_explode_time_ms,
+                        Settings::BOMB_TIME_RANGE,
+                    )
+                    .text("Bomb Time")
+                    .clamp_to_range(true),
                 )
                 .on_hover_text("Time between placing a bomb and its explosion [ms]");
                 ui.add(
                     egui::Slider::new(&mut settings.speed_base, Settings::SPEED_BASE_RANGE)
-                        .text("Base Speed"),
+                        .text("Base Speed")
+                        .clamp_to_range(false),
                 )
                 .on_hover_text("Speed of the Player without any upgrades [Cells/s/100]");
                 ui.add(
-                    egui::Slider::new(&mut settings.speed_multiplyer, Settings::SPEED_MULTIPLYER_RANGE)
-                        .text("Speed Increase"),
+                    egui::Slider::new(
+                        &mut settings.speed_multiplyer,
+                        Settings::SPEED_MULTIPLYER_RANGE,
+                    )
+                    .text("Speed Increase")
+                    .clamp_to_range(false),
                 )
                 .on_hover_text("Player speed increase per speed powerup [Cells/s/100]");
                 ui.add(
@@ -244,96 +252,121 @@ impl MyApp {
                         &mut settings.upgrade_explosion_power,
                         Settings::UPGRADE_EXPLOSION_POWER_RANGE,
                     )
-                    .text("Upgrade Explosion"),
+                    .text("Upgrade Explosion")
+                    .clamp_to_range(false),
                 )
                 .on_hover_text("Explosion Range of ignited Powerups [cells]");
                 ui.add(
-                    egui::Slider::new(&mut settings.wood_burn_time_ms, Settings::WOOD_BURN_TIME_RANGE)
-                        .text("Wood Burn Time"),
+                    egui::Slider::new(
+                        &mut settings.wood_burn_time_ms,
+                        Settings::WOOD_BURN_TIME_RANGE,
+                    )
+                    .text("Wood Burn Time")
+                    .clamp_to_range(false),
                 )
                 .on_hover_text("Time that wood burns after igniting [ms]");
                 ui.add(
-                    egui::Slider::new(&mut settings.fire_burn_time_ms, Settings::FIRE_BURN_TIME_RANGE)
-                        .text("Fire Burn Time"),
+                    egui::Slider::new(
+                        &mut settings.fire_burn_time_ms,
+                        Settings::FIRE_BURN_TIME_RANGE,
+                    )
+                    .text("Fire Burn Time")
+                    .clamp_to_range(false),
                 )
                 .on_hover_text("Time that fire burns [ms]");
                 ui.add(
                     egui::Slider::new(&mut settings.bomb_offset, Settings::BOMB_OFFSET_RANGE)
-                        .text("Bomb Placement Offset"),
+                        .text("Bomb Placement Offset")
+                        .clamp_to_range(false),
                 )
                 .on_hover_text("While running, how far behind hans a bomb is placed [cells/100]");
             });
-
             ui.vertical(|ui| {
-                const RATIO_RANGE: std::ops::RangeInclusive<u32> =0..=50;
-
+                const RATIO_RANGE: std::ops::RangeInclusive<u32> = 0..=50;
                 ui.heading("Ratios of cells that burned wood will turn into");
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::Slider::new(&mut settings.ratios.power, RATIO_RANGE).text("Power Upgrade"),
                     );
-                }). response.on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
+                })
+                .response
+                .on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::Slider::new(&mut settings.ratios.speed, RATIO_RANGE).text("Speed Upgrade"),
                     );
-                }). response.on_hover_text("Consuming this will upgrade the player's walking speed");
+                })
+                .response
+                .on_hover_text("Consuming this will upgrade the player's walking speed");
                 ui.horizontal(|ui| {
                     ui.add(egui::Slider::new(&mut settings.ratios.bombs, RATIO_RANGE).text("Bomb Upgrade"));
-                }). response.on_hover_text("Consuming this will increase how many bombs the player can place simultaneously");
-                ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut settings.ratios.teleport, RATIO_RANGE).text("Teleport"));
-                }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
+                })
+                .response
+                .on_hover_text(
+                    "Consuming this will increase how many bombs the player can place simultaneously",
+                );
+                ui.horizontal(|ui| { ui.add(egui::Slider::new(&mut settings.ratios.teleport, RATIO_RANGE).text("Teleport")); }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
                 ui.horizontal(|ui| {
                     ui.add(egui::Slider::new(&mut settings.ratios.wall, RATIO_RANGE).text("Wall"));
-                }). response.on_hover_text("Wall\nIf this happens too often, you will be stuck.");
+                })
+                .response
+                .on_hover_text("Wall\nIf this happens too often, you will be stuck.");
                 ui.horizontal(|ui| {
                     ui.add(egui::Slider::new(&mut settings.ratios.wood, RATIO_RANGE).text("Wood"));
-                }). response.on_hover_text("Wood\nYou can try and explode again");
+                })
+                .response
+                .on_hover_text("Wood\nYou can try and explode again");
                 ui.horizontal(|ui| {
                     ui.add(egui::Slider::new(&mut settings.ratios.clear, RATIO_RANGE).text("Empty Cell"));
-                }). response.on_hover_text("Just a boring empty Cell");
+                })
+                .response
+                .on_hover_text("Just a boring empty Cell");
             });
-
-
             ui.vertical(|ui| {
                 ui.heading("effective Ratios");
                 let image_dims = egui::Vec2 { x: 16.0, y: 16.0 };
                 let percentages = settings.ratios.normalize();
-
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_upgrade_power"), image_dims);
                     ui.label(format!("{}%", percentages.power));
-                }). response.on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
+                })
+                .response
+                .on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_upgrade_speed"), image_dims);
                     ui.label(format!("{}%", percentages.speed));
-                }). response.on_hover_text("Consuming this will upgrade the player's walking speed");
+                })
+                .response
+                .on_hover_text("Consuming this will upgrade the player's walking speed");
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_upgrade_bomb"), image_dims);
                     ui.label(format!("{}%", percentages.bombs));
-                }). response.on_hover_text("Consuming this will increase how many bombs the player can place simultaneously");
-                ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_teleport"), image_dims);
-                    ui.label(format!("{}%", percentages.teleport));
-                }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
+                })
+                .response
+                .on_hover_text(
+                    "Consuming this will increase how many bombs the player can place simultaneously",
+                );
+                ui.horizontal(|ui| { ui.image(textures.get_texture("cell_teleport"), image_dims); ui.label(format!("{}%", percentages.teleport)); }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_wall"), image_dims);
                     ui.label(format!("{}%", percentages.wall));
-                }). response.on_hover_text("Wall\nIf this happens too often, you will be stuck.");
+                })
+                .response
+                .on_hover_text("Wall\nIf this happens too often, you will be stuck.");
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_wood"), image_dims);
                     ui.label(format!("{}%", percentages.wood));
-                }). response.on_hover_text("Wood\nYou can try and explode again");
+                })
+                .response
+                .on_hover_text("Wood\nYou can try and explode again");
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_empty"), image_dims);
                     ui.label(format!("{}%", percentages.clear));
-                }). response.on_hover_text("Just a boring empty Cell");
+                })
+                .response
+                .on_hover_text("Just a boring empty Cell");
             });
-
-
         });
-
         ui.horizontal(|ui| {
             if ui.button("Restore Default Settings").clicked() {
                 self.settings = Settings::default();

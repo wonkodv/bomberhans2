@@ -199,9 +199,9 @@ impl Settings {
     pub const PLAYERS_RANGE: RangeInclusive<u32> = 1..=4; // TODO: generate maps with more players
     pub const RATIOS_RANGE: RangeInclusive<u32> = 0..=100;
     pub const SPEED_BASE_DEFAULT: u32 = 100;
-    pub const SPEED_BASE_RANGE: RangeInclusive<u32> = 10..=2_000;
+    pub const SPEED_BASE_RANGE: RangeInclusive<u32> = 10..=500;
     pub const SPEED_MULTIPLYER_DEFAULT: u32 = 50;
-    pub const SPEED_MULTIPLYER_RANGE: RangeInclusive<u32> = 0..=1_000;
+    pub const SPEED_MULTIPLYER_RANGE: RangeInclusive<u32> = 0..=200;
     pub const TOMBSTONE_WALKING_CHANCE_DEFAULT: u32 = 40;
     pub const TOMBSTONE_WALKING_CHANCE_RANGE: RangeInclusive<u32> = 0..=100;
     pub const UPGRADE_EXPLOSION_POWER_DEFAULT: u32 = 1;
