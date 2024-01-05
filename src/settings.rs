@@ -3,11 +3,11 @@ use std::ops::RangeInclusive;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::game::Cell;
-use crate::game::Duration;
-use crate::game::Position;
-use crate::game::Upgrade;
-use crate::game::TICKS_PER_SECOND;
+use crate::field::Cell;
+use crate::field::Upgrade;
+use crate::utils::Duration;
+use crate::utils::Position;
+use crate::utils::TICKS_PER_SECOND;
 
 /// Ratios of Wood turning into those cell types:
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -260,5 +260,12 @@ mod test {
         assert_eq!(Cell::Wall, r.random(11));
         assert_eq!(Cell::Empty, r.random(12));
         assert_eq!(Cell::Empty, r.random(13));
+    }
+
+    #[test]
+    fn test_walking_distance() {
+        let r = Settings::default();
+        assert_eq!(r.get_update_walk_distance(1), 4);
+        assert_eq!(r.get_update_walk_distance(2), 5);
     }
 }

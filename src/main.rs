@@ -1,3 +1,4 @@
+mod field;
 mod game;
 mod gui;
 mod network;

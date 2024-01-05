@@ -12,17 +12,17 @@ use egui::Shape;
 use egui::TextureHandle;
 use egui::TextureId;
 
+use crate::field::Cell;
 use crate::game::Action;
-use crate::game::Cell;
-use crate::game::CellPosition;
-use crate::game::Direction;
 use crate::game::Game;
 use crate::game::PlayerState;
-use crate::game::Position;
 use crate::game::State;
-use crate::game::TimeStamp;
-use crate::game::TICKS_PER_SECOND;
 use crate::settings::Settings;
+use crate::utils::CellPosition;
+use crate::utils::Direction;
+use crate::utils::Position;
+use crate::utils::TimeStamp;
+use crate::utils::TICKS_PER_SECOND;
 
 const PIXEL_PER_CELL: f32 = 42.0;
 
@@ -114,10 +114,10 @@ impl TextureManager {
         };
 
         let s = match player.action.walking {
-            Some(crate::game::Direction::North) => "walking_n",
-            Some(crate::game::Direction::West) => "walking_w",
-            Some(crate::game::Direction::South) => "walking_s",
-            Some(crate::game::Direction::East) => "walking_e",
+            Some(Direction::North) => "walking_n",
+            Some(Direction::West) => "walking_w",
+            Some(Direction::South) => "walking_s",
+            Some(Direction::East) => "walking_e",
             None if player.action.placing => "placing",
             _ => "standing",
         };
@@ -356,7 +356,7 @@ impl MyApp {
 
             if start_button.clicked() {
                 match confy::store("bomberhans2", Some("new_game_settings"), &self.settings) {
-                    Ok(_) => log::info!("Settings stored"),
+                    Ok(()) => log::info!("Settings stored"),
                     Err(e) => log::error!("Error storing config: {e}"),
                 }
 
@@ -368,7 +368,7 @@ impl MyApp {
             }
 
             if ui.button("Don't click").clicked() {
-                panic!("Don't click?");
+                println!("Don't click!");
             }
         });
     }
