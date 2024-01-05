@@ -1,6 +1,6 @@
 [package]
 name = "bomberhans2"
-version = "0.2.17"
+version = "0.2.18"
 edition = "2021"
 authors = [ "wonko" ]
 description = "A bad looking bomberman clone where dying doesn't stop you"
