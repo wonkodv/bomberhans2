@@ -10,8 +10,12 @@ use crate::utils::Idx;
 use crate::utils::PlayerId;
 use crate::utils::Position;
 use crate::utils::TimeStamp;
+use crate::utils::TICKS_PER_SECOND;
+use crate::utils::TIME_PER_TICK;
+use std::collections::VecDeque;
 use std::fmt;
 use std::rc::Rc;
+use std::time;
 
 #[derive(Debug, Clone)]
 pub struct Player {
@@ -105,44 +109,13 @@ impl PlayerState {
 
 /// Constants of an active Game
 #[derive(Debug)]
-pub struct Game {
+pub struct GameStatic {
     pub players: Vec<Player>,
     pub settings: Settings,
     pub local_player: PlayerId,
 }
 
-impl Game {
-    pub fn new_local_game(settings: Settings) -> Self {
-        let field = Field::new(settings.width, settings.height);
-        let start_positions = field.start_positions();
-
-        assert!(start_positions.len() >= settings.players as _);
-
-        let local_player = PlayerId(0);
-
-        let players: Vec<Player> = (0..(settings.players as usize))
-            .map(|id| Player {
-                name: {
-                    if id == local_player.0 {
-                        format!("Player {id}")
-                    } else {
-                        "Local Player".into()
-                    }
-                },
-                id: PlayerId(id as _),
-                start_position: Position::from_cell_position(start_positions[id]),
-            })
-            .collect();
-
-        Self {
-            players,
-            settings,
-            local_player,
-        }
-    }
-}
-
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Copy)]
 pub struct Action {
     pub walking: Option<Direction>,
     pub placing: bool,
@@ -172,16 +145,16 @@ impl fmt::Debug for Action {
 
 /// The variable state of the game at a given time
 #[derive(Debug, Clone)]
-pub struct State {
+pub struct GameState {
     pub time: TimeStamp,
     pub field: Field,
     pub player_states: Vec<PlayerState>,
-    pub game: Rc<Game>,
+    pub game: Rc<GameStatic>,
 }
 
 /// APIs
-impl State {
-    pub fn new(game: Rc<Game>) -> Self {
+impl GameState {
+    pub fn new(game: Rc<GameStatic>) -> Self {
         let time = TimeStamp::default();
 
         let player_states: Vec<PlayerState> = game
@@ -200,7 +173,7 @@ impl State {
         }
     }
 
-    pub fn update(&mut self) {
+    pub fn simulate_1_update(&mut self) {
         for i in 0..self.player_states.len() {
             // GAME_RULE: players with lower ID are processed earlier and win,
             // if both place bombs at the same spot 😎
@@ -221,14 +194,14 @@ impl State {
 }
 
 /// Update functions, that modify the Game State
-impl State {
+impl GameState {
     fn increment_game_time(&mut self) {
         self.time = self.time + Duration::from_ticks(1);
     }
 
     /// advance a player 1 tick
     fn update_player(&mut self, player_id: PlayerId) {
-        let action = self.player_states[player_id.0].action.clone();
+        let action = self.player_states[player_id.0].action;
         if action.placing {
             self.place_bomb(player_id);
         }
@@ -252,6 +225,7 @@ impl State {
             .get_update_walk_distance(player_state.speed)
             .try_into()
             .expect("walked distance fits i32");
+        walk_distance = walk_distance * Position::ACCURACY / TICKS_PER_SECOND as i32 / 100;
 
         let current_cell_pos = player_state.position.as_cell_pos();
         let cell_ahead = &self.field[current_cell_pos.add(direction, 1)];
@@ -588,6 +562,151 @@ impl State {
     }
 }
 
+#[derive(Debug)]
+pub struct MultiPlayerGame {
+    game_static: Rc<GameStatic>,
+    server_state: GameState,
+    local_actions: VecDeque<(TimeStamp, Action)>,
+    local_state: GameState,
+    last_local_update: std::time::Instant,
+}
+
+impl MultiPlayerGame {
+    /// proceed game time according to real time since last update
+    fn update_local_simulation_realtime(&mut self) {
+        let now = time::Instant::now();
+        while now >= self.last_local_update + TIME_PER_TICK {
+            self.last_local_update += TIME_PER_TICK;
+            self.local_state.simulate_1_update();
+        }
+    }
+
+    pub fn set_local_player_action(&mut self, action: Action) {
+        self.local_state
+            .set_player_action(self.game_static.local_player, action);
+        self.local_actions
+            .push_back((self.local_state.time, action));
+        // TODO: send to server
+    }
+}
+
+#[derive(Debug)]
+pub struct SinglePlayerGame {
+    game_static: Rc<GameStatic>,
+    game_state: GameState,
+    last_update: std::time::Instant,
+}
+
+impl SinglePlayerGame {
+    /// proceed game time according to real time since last update
+    fn update_simulation_realtime(&mut self) {
+        let now = time::Instant::now();
+        while now >= self.last_update + TIME_PER_TICK {
+            self.last_update += TIME_PER_TICK;
+            self.game_state.simulate_1_update();
+        }
+    }
+
+    pub fn set_local_player_action(&mut self, action: Action) {
+        self.game_state
+            .set_player_action(self.game_static.local_player, action);
+    }
+}
+
+#[derive(Debug)]
+pub enum Game {
+    SinglePlayer(SinglePlayerGame),
+    MultiPlayer(MultiPlayerGame),
+}
+
+impl Game {
+    pub fn new_local_game(settings: Settings) -> Self {
+        let field = Field::new(settings.width, settings.height);
+        let start_positions = field.start_positions();
+
+        assert!(start_positions.len() >= settings.players as _);
+
+        let local_player = PlayerId(0);
+
+        let players: Vec<Player> = (0..(settings.players as usize))
+            .map(|id| Player {
+                name: {
+                    if id == local_player.0 {
+                        format!("Player {id}")
+                    } else {
+                        "Local Player".into()
+                    }
+                },
+                id: PlayerId(id as _),
+                start_position: Position::from_cell_position(start_positions[id]),
+            })
+            .collect();
+
+        let game_static = GameStatic {
+            players,
+            settings,
+            local_player,
+        };
+        let game_static = Rc::new(game_static);
+        let game_state = GameState::new(Rc::clone(&game_static));
+
+        Game::SinglePlayer(SinglePlayerGame {
+            game_state,
+            game_static,
+            last_update: time::Instant::now(),
+        })
+    }
+
+    pub fn new_multiplayer_game(
+        settings: Settings,
+        socket: (),
+        local_player: PlayerId,
+        players: Vec<Player>,
+    ) -> Self {
+        let game_static = GameStatic {
+            players,
+            settings,
+            local_player,
+        };
+        let state = GameState::new(Rc::new(game_static));
+
+        todo!()
+    }
+
+    pub fn set_local_player_action(&mut self, action: Action) {
+        match self {
+            Game::SinglePlayer(spg) => spg.set_local_player_action(action),
+            Game::MultiPlayer(mpg) => todo!(),
+        }
+    }
+
+    pub fn settings(&self) -> &Settings {
+        match self {
+            Game::SinglePlayer(spg) => &spg.game_static.settings,
+            Game::MultiPlayer(mpg) => &mpg.game_static.settings,
+        }
+    }
+
+    pub fn stat(&self) -> &GameStatic {
+        match self {
+            Game::SinglePlayer(spg) => &spg.game_static,
+            Game::MultiPlayer(mpg) => &mpg.game_static,
+        }
+    }
+
+    pub fn local_state(&mut self) -> &GameState {
+        match self {
+            Game::SinglePlayer(spg) => {
+                spg.update_simulation_realtime(); // TODO: is this hacky? where to put
+                                                  // this? I don't want an extra thread
+                                                  // for this
+                &spg.game_state
+            }
+            Game::MultiPlayer(mpg) => &mpg.local_state,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -601,11 +720,11 @@ mod test {
         assert!(r != random(TimeStamp::default(), 0, 1));
     }
 
-    fn game() -> State {
+    fn game() -> GameState {
         let player1 = Player::new("test player 1".to_owned(), PlayerId(0), Position::new(0, 0));
         let local_player = player1.id;
         let settings = Settings::default();
-        let game = Game {
+        let game = GameStatic {
             players: vec![player1],
             settings,
             local_player,
@@ -613,7 +732,7 @@ mod test {
 
         let game = Rc::new(game);
 
-        let mut gs = State::new(game);
+        let mut gs = GameState::new(game);
         gs.player_states[0].current_bombs_placed = 42; // Hack, so bombs can explode without int
                                                        // underrun. If a test cares, it should set
                                                        // this correctly

@@ -26,7 +26,8 @@ where
     }
 }
 
-pub const TICKS_PER_SECOND: u32 = 60;
+pub const TICKS_PER_SECOND: u32 = 50;
+pub const TIME_PER_TICK: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// A Time Stamp (not a duration)
 #[derive(Default, Copy, Clone, PartialEq, PartialOrd)]

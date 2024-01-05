@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Duration;
-use std::time::Instant;
 
 use eframe::egui;
 use egui::pos2;
@@ -16,7 +14,6 @@ use crate::field::Cell;
 use crate::game::Action;
 use crate::game::Game;
 use crate::game::PlayerState;
-use crate::game::State;
 use crate::settings::Settings;
 use crate::utils::CellPosition;
 use crate::utils::Direction;
@@ -28,14 +25,14 @@ const PIXEL_PER_CELL: f32 = 42.0;
 
 enum Step {
     Initial,
-    Game(State),
+    Game(Game),
     GameOver(String),
 }
 
 impl Step {
-    fn game_state(&mut self) -> &mut State {
-        if let Step::Game(ref mut state) = *self {
-            state
+    fn game(&mut self) -> &mut Game {
+        if let Step::Game(game) = self {
+            game
         } else {
             panic!("no game running");
         }
@@ -82,7 +79,6 @@ pub fn gui() {
                 settings,
                 player_name: "New Player".into(),
                 textures: None,
-                last_frame: Instant::now(),
                 walking_directions: DirectionStack::new(),
             })
         }),
@@ -163,7 +159,6 @@ struct MyApp {
     walking_directions: DirectionStack,
 
     textures: Option<Rc<TextureManager>>,
-    last_frame: Instant,
 }
 
 impl MyApp {
@@ -183,7 +178,7 @@ impl MyApp {
 
         ui.style_mut().spacing.slider_width = 300.0;
 
-        if let Step::GameOver(ref s) = self.step {
+        if let Step::GameOver(s) = &self.step {
             ui.label(format!("GameOver: {s}"));
         }
         ui.add(egui::TextEdit::singleline(&mut settings.game_name))
@@ -361,9 +356,7 @@ impl MyApp {
                 }
 
                 let game = Game::new_local_game(self.settings.clone());
-                let game = Rc::new(game);
-                let game_state = State::new(game);
-                self.step = Step::Game(game_state);
+                self.step = Step::Game(game);
                 return;
             }
 
@@ -374,25 +367,12 @@ impl MyApp {
     }
 
     fn update_game(&mut self, ui: &mut egui::Ui) {
-        self.update_game_simulation();
         self.update_game_inputs(ui);
         self.update_game_draw(ui);
     }
 
-    fn update_game_simulation(&mut self) {
-        let game_state = self.step.game_state();
-
-        let now = Instant::now();
-        let duration = now - self.last_frame;
-        self.last_frame = now;
-        let ticks = (duration.as_secs_f32() * TICKS_PER_SECOND as f32).round() as u32;
-
-        for _ in 0..ticks {
-            game_state.update();
-        }
-    }
     fn update_game_inputs(&mut self, ui: &mut egui::Ui) {
-        let game_state = self.step.game_state();
+        let game = self.step.game();
 
         for (key, direction) in [
             (egui::Key::W, Direction::North),
@@ -410,7 +390,7 @@ impl MyApp {
 
         let placing = ui.ctx().input_mut().key_down(egui::Key::Space);
         let walking = self.walking_directions.get();
-        game_state.set_player_action(game_state.game.local_player, Action { walking, placing });
+        game.set_local_player_action(Action { walking, placing });
     }
 
     fn update_game_draw(&mut self, ui: &mut egui::Ui) {
@@ -418,7 +398,7 @@ impl MyApp {
 
         let game_over = ui
             .horizontal(|ui| {
-                ui.label(&self.step.game_state().game.settings.game_name);
+                ui.label(&self.step.game().settings().game_name);
                 let button = ui.button("Stop Game");
                 if button.clicked() {
                     self.step = Step::GameOver("You pressed Stop".to_owned());
@@ -433,10 +413,10 @@ impl MyApp {
         };
 
         let step = &mut self.step;
-        let game_state = step.game_state();
+        let game = step.game();
 
-        let width = (game_state.game.settings.width + 2) as f32 * PIXEL_PER_CELL;
-        let height = (game_state.game.settings.height + 2) as f32 * PIXEL_PER_CELL;
+        let width = (game.settings().width + 2) as f32 * PIXEL_PER_CELL;
+        let height = (game.settings().height + 2) as f32 * PIXEL_PER_CELL;
 
         let game_field = ui.image(
             textures.get_texture("background"),
@@ -457,18 +437,23 @@ impl MyApp {
             },
         );
 
-        painter.extend(game_state.field.iter_with_border().map(|(pos, cell)| {
-            Shape::image(
-                textures.get_cell(cell),
-                cell_rect(pos, game_field.rect.min),
-                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-                Color32::WHITE,
-            )
-        }));
+        painter.extend(
+            game.local_state()
+                .field
+                .iter_with_border()
+                .map(|(pos, cell)| {
+                    Shape::image(
+                        textures.get_cell(cell),
+                        cell_rect(pos, game_field.rect.min),
+                        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                        Color32::WHITE,
+                    )
+                }),
+        );
 
-        let time = game_state.time;
+        let time = game.local_state().time;
 
-        painter.extend(game_state.player_states.iter().map(|player| {
+        painter.extend(game.local_state().player_states.iter().map(|player| {
             Shape::image(
                 textures.get_player(player, time),
                 player_rect(player.position, game_field.rect.min),
@@ -477,7 +462,9 @@ impl MyApp {
             )
         }));
         ui.ctx()
-            .request_repaint_after(Duration::from_secs_f32(1.0 / TICKS_PER_SECOND as f32));
+            .request_repaint_after(std::time::Duration::from_secs_f32(
+                1.0 / TICKS_PER_SECOND as f32,
+            ));
     }
 }
 

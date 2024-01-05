@@ -6,8 +6,6 @@ use serde::Serialize;
 use crate::field::Cell;
 use crate::field::Upgrade;
 use crate::utils::Duration;
-use crate::utils::Position;
-use crate::utils::TICKS_PER_SECOND;
 
 /// Ratios of Wood turning into those cell types:
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,9 +198,9 @@ impl Settings {
     pub const PLAYERS_DEFAULT: u32 = 4;
     pub const PLAYERS_RANGE: RangeInclusive<u32> = 1..=4; // TODO: generate maps with more players
     pub const RATIOS_RANGE: RangeInclusive<u32> = 0..=100;
-    pub const SPEED_BASE_DEFAULT: u32 = 700;
+    pub const SPEED_BASE_DEFAULT: u32 = 100;
     pub const SPEED_BASE_RANGE: RangeInclusive<u32> = 10..=2_000;
-    pub const SPEED_MULTIPLYER_DEFAULT: u32 = 130;
+    pub const SPEED_MULTIPLYER_DEFAULT: u32 = 50;
     pub const SPEED_MULTIPLYER_RANGE: RangeInclusive<u32> = 0..=1_000;
     pub const TOMBSTONE_WALKING_CHANCE_DEFAULT: u32 = 40;
     pub const TOMBSTONE_WALKING_CHANCE_RANGE: RangeInclusive<u32> = 0..=100;
@@ -214,18 +212,11 @@ impl Settings {
     pub const WOOD_BURN_TIME_RANGE: RangeInclusive<u32> = 0..=10_000;
 
     /// Walking Speed based on `speed_powerup`
-    /// returned speed is returned in `(Cell×TICKS_PER_SECOND)/(PLAYER_POSITION_ACCURACY×s)`
-    /// so a speed of 1 is 60/100 cells/s
+    /// returned speed is returned in `Cells/100s`
     ///
     /// Speed of input variables is Cells/100s
     pub fn get_update_walk_distance(&self, player_speed: u32) -> u32 {
-        // GAME_RULE: Player Speed is capped at 1 Cell / Update
-        u32::min(
-            (self.speed_base + (player_speed * self.speed_multiplyer)) * TICKS_PER_SECOND
-                / Position::ACCURACY as u32
-                / 100,
-            Position::ACCURACY as u32,
-        )
+        self.speed_base + (player_speed * self.speed_multiplyer)
     }
 
     pub fn bomb_explode_time(&self) -> Duration {
@@ -265,7 +256,8 @@ mod test {
     #[test]
     fn test_walking_distance() {
         let r = Settings::default();
-        assert_eq!(r.get_update_walk_distance(1), 4);
-        assert_eq!(r.get_update_walk_distance(2), 5);
+        assert_eq!(r.get_update_walk_distance(0), 100);
+        assert_eq!(r.get_update_walk_distance(1), 150);
+        assert_eq!(r.get_update_walk_distance(2), 200);
     }
 }
