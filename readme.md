@@ -14,9 +14,12 @@ Bomberhans
 
 
 
+For a guided tour through the code see [hitchhiker.md](hitchhiker.md).
+
 TODOS
 ------
 
+*   __Networking__
 *   Fit game field into Window
 *   Game Modes:
     *   Destroy other's start point to win
