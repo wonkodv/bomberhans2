@@ -8,7 +8,7 @@ repos:
       entry: cargo check
       language: system
       files: \.rs$|^Cargo\.
-      stages: ["commit"]
+      stages: ["pre-commit"]
       pass_filenames: false
     - id: fmt
       name: fmt
@@ -16,7 +16,7 @@ repos:
       entry: cargo fmt
       language: system
       files: \.rs$|^Cargo\.
-      stages: ["commit"]
+      stages: ["pre-commit"]
       pass_filenames: false
     - id: clippy
       name: clippy
@@ -24,18 +24,18 @@ repos:
       entry: cargo clippy
       language: system
       files: \.rs$|^Cargo\.
-      stages: ["push"]
+      stages: ["pre-push"]
       pass_filenames: false
     - id: build
       name: build
       entry: cargo build
       language: system
-      stages: ["push"]
+      stages: ["pre-push"]
       pass_filenames: false
     - id: test
       name: test
       description: run tests
       entry: cargo test
       language: system
-      stages: ["push"]
+      stages: ["pre-push"]
       pass_filenames: false
