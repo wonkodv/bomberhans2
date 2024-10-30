@@ -1,9 +1,8 @@
 use bomberhans_lib::field::Field;
-use bomberhans_lib::game_state::*;
+use bomberhans_lib::game_state::{Action, GameState, GameStatic, Player};
 use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::*;
+use bomberhans_lib::utils::{PlayerId, Position, TimeStamp, TIME_PER_TICK};
 use std::collections::VecDeque;
-use std::fmt;
 use std::rc::Rc;
 use std::time;
 

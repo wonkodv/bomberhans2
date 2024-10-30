@@ -19,6 +19,8 @@
         devShells.default = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [
             cargo-expand
+            cargo
+            rustc
             clang
             clippy
             cmake
@@ -28,7 +30,6 @@
             llvmPackages_latest.bintools
             pkg-config
             pre-commit
-            rust-analyzer
             rust-analyzer
             rustfmt
           ];

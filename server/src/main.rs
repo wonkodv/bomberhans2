@@ -9,9 +9,9 @@ fn serve() -> Result<(), Box<dyn Error>> {
 
     loop {
         let (amt, src) = socket.recv_from(&mut buf)?;
-        println!("Received {} bytes from {}", amt, src);
+        println!("Received {amt} bytes from {src}");
 
-        socket.send_to(&buf[..amt], &src)?;
+        socket.send_to(&buf[..amt], src)?;
     }
 }
 
@@ -34,9 +34,9 @@ fn main() {
     ));
 
     match serve() {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             std::process::exit(1);
         }
     }
