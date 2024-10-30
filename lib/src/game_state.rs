@@ -20,13 +20,13 @@ use std::time;
 #[derive(Debug, Clone)]
 pub struct Player {
     /// Name the player chose
-    name: String,
+    pub name: String,
 
     /// Id of the player in the game
-    id: PlayerId,
+    pub id: PlayerId,
 
     /// Re-/Spawn place
-    start_position: Position,
+    pub start_position: Position,
 }
 
 impl Player {

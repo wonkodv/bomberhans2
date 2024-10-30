@@ -1,11 +1,8 @@
-mod field;
+use std::io::Write;
+
 mod game;
 mod gui;
-mod network;
-mod settings;
-mod utils;
 
-use std::io::Write;
 fn main() {
     env_logger::Builder::from_default_env()
         .format(|buf, rec| {
@@ -19,6 +16,6 @@ fn main() {
             )
         })
         .init();
-    log::info!(concat!("Running Bomberhans ", env!("VERSION")));
+    log::info!(concat!("Running Bomberhans ", env!("CARGO_PKG_VERSION")));
     gui::gui();
 }

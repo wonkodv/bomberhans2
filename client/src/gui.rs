@@ -10,16 +10,16 @@ use egui::Shape;
 use egui::TextureHandle;
 use egui::TextureId;
 
-use crate::field::Cell;
-use crate::game::Action;
 use crate::game::Game;
-use crate::game::PlayerState;
-use crate::settings::Settings;
-use crate::utils::CellPosition;
-use crate::utils::Direction;
-use crate::utils::Position;
-use crate::utils::TimeStamp;
-use crate::utils::TICKS_PER_SECOND;
+use bomberhans_lib::field::Cell;
+use bomberhans_lib::game_state::Action;
+use bomberhans_lib::game_state::PlayerState;
+use bomberhans_lib::settings::Settings;
+use bomberhans_lib::utils::CellPosition;
+use bomberhans_lib::utils::Direction;
+use bomberhans_lib::utils::Position;
+use bomberhans_lib::utils::TimeStamp;
+use bomberhans_lib::utils::TICKS_PER_SECOND;
 
 const PIXEL_PER_CELL: f32 = 42.0;
 
@@ -71,7 +71,7 @@ pub fn gui() {
         ..Default::default()
     };
     eframe::run_native(
-        concat!("Bomberhans ", env!("VERSION")),
+        concat!("Bomberhans ", env!("CARGO_PKG_VERSION")),
         options,
         Box::new(|_cc| {
             Box::new(MyApp {
@@ -545,7 +545,10 @@ fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
                 $x,
                 ctx.load_texture(
                     $x,
-                    load_image_from_memory(include_bytes!(concat!("../images/", $x, ".bmp")), $t),
+                    load_image_from_memory(
+                        include_bytes!(concat!("../../images/", $x, ".bmp")),
+                        $t,
+                    ),
                     egui::TextureOptions::default(),
                 ),
             )
