@@ -1,5 +1,8 @@
 use core::fmt;
 
+use serde::Deserialize;
+use serde::Serialize;
+
 pub fn random(time: TimeStamp, r1: i32, r2: i32) -> u32 {
     // TODO:  test / improve randomness
     let mut x: u32 = 42;
@@ -30,7 +33,7 @@ pub const TICKS_PER_SECOND: u32 = 50;
 pub const TIME_PER_TICK: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// A Time Stamp (not a duration)
-#[derive(Default, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Default, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct TimeStamp {
     inner: u32,
 }
@@ -87,7 +90,7 @@ impl fmt::Debug for Duration {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlayerId(pub usize);
 
 impl fmt::Debug for PlayerId {
@@ -96,7 +99,7 @@ impl fmt::Debug for PlayerId {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Direction {
     North,
     West,
