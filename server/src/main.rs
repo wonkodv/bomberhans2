@@ -56,10 +56,7 @@ fn main() {
             )
         })
         .init();
-    log::info!(concat!(
-        "Running Bomberhans Server ",
-        env!("CARGO_PKG_VERSION")
-    ));
+    log::info!("Running Bomberhans Server {}", bomberhans_lib::VERSION);
 
     match serve() {
         Ok(()) => {}

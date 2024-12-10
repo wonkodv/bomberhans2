@@ -71,7 +71,7 @@ pub fn gui() {
         ..Default::default()
     };
     eframe::run_native(
-        concat!("Bomberhans ", env!("CARGO_PKG_VERSION")),
+        &format!("Bomberhans {}", bomberhans_lib::VERSION),
         options,
         Box::new(|_cc| {
             Box::new(MyApp {

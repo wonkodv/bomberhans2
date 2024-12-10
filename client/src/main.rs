@@ -16,6 +16,6 @@ fn main() {
             )
         })
         .init();
-    log::info!(concat!("Running Bomberhans ", env!("CARGO_PKG_VERSION")));
+    log::info!("Running Bomberhans Client {}", bomberhans_lib::VERSION);
     gui::gui();
 }
