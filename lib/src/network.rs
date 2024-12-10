@@ -2,26 +2,11 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::game_state::Action;
+use crate::game_state::GameStatic;
 use crate::utils::PlayerId;
 use crate::utils::TimeStamp;
 
 const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ClientHello {
-    pub magic: u32,
-
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ServerHello {
-    pub name: String,
-
-    pub cookie: ClientId,
-
-    pub games: Vec<(GameId, String)>,
-}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ClientId(u64);
@@ -40,12 +25,30 @@ impl GameId {
     }
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct LobbyId(u64);
-impl LobbyId {
-    pub fn new(val: u64) -> Self {
-        Self(val)
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClientHello {
+    pub player_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServerHello {
+    pub cookie: ClientId,
+
+    pub server_name: String,
+
+    pub lobbies: Vec<(GameId, String)>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClientJoinLobby {
+    pub lobby: GameId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServerLobbyUpdate {
+    client_player_id: PlayerId,
+
+    game: GameStatic,
 }
 
 /// Periodic Client to Server update
@@ -77,9 +80,39 @@ pub struct ServerUpdate {
 }
 
 /// An Update is when the player changed their current action
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Update {
-    player: PlayerId,
-    action: Action,
-    time: TimeStamp,
+    pub player: PlayerId,
+    pub action: Action,
+    pub time: TimeStamp,
+}
+
+/// A Message from Client to Server
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ClientMessage {
+    Update(ClientUpdate),
+    Hello(ClientHello),
+    Bye,
+}
+
+/// A Message from Server to Client
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ServerMessage {
+    Update(ServerUpdate),
+    Hello(ServerHello),
+    LobbyUpdate(ServerLobbyUpdate),
+}
+
+pub fn encode<S>(value: &S) -> Vec<u8>
+where
+    S: Serialize,
+    S: std::fmt::Debug,
+{
+    let result = postcard::to_allocvec(value).expect("can serialize anything");
+    debug_assert!(result.len() < 1000, "Message too large {value:?}");
+    result
+}
+
+pub fn decode<T: for<'a> Deserialize<'a>>(data: &[u8]) -> Option<T> {
+    postcard::from_bytes::<T>(&data).ok()
 }

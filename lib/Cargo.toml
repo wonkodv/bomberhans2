@@ -8,6 +8,7 @@ license = { workspace = true }
 [dependencies]
 
 log   = { workspace = true }
+postcard = { version = "1.1.1", default-features = false, features = ["alloc"] }
 serde = { workspace = true }
 
 [lints]

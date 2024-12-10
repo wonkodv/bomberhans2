@@ -169,7 +169,7 @@ impl fmt::Debug for CellPosition {
 }
 
 /// Player positions
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
     pub y: i32,

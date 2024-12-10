@@ -52,21 +52,17 @@ This produces the new assumed state, which will be rendered on the next frame
 
 ### Network Protocol Flow Diagram
 
-#### Lobby
+#### Before the Game
 
-all communication must be reliable
+*   Client Sends every Message repeatedly until Server Acknowledges
 
-1.  Client (host) opens a new Multiplayer Game
-2.  Host announces that to server
-3.  Server adds game to list of games
-4.  Other Clients (guest) can join that game
-5.  Server sends list of all guests to host and guests
-6.  Host starts the game
-
-#### Game Start
-
-1.  Server Sends game rules to all clients over reliable channel
-2.  after each client acknwodleged, set game as started
+1.  Client sends Hello, Server responds with List of Lobbies and Client Cookie
+2.  Client Creates / Joins a Lobby
+3.  Client requests Lobby State once per second, Server responds
+4.  Host (Client that opened the lobby) can change Settings
+5.  Each Guest can set self as ready
+6.  When all Guests ready, Host starts the Game, Server send GameStart to all clients
+7.  Clients polling State of Lobby are send GameStart until they stop asking
 
 #### Game
 

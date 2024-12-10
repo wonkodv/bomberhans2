@@ -1,107 +1,45 @@
-use std::collections::HashMap;
-use std::hash::Hash as _;
-use std::hash::Hasher as _;
 use std::io::Write;
 
 use std::error::Error;
-use std::net::SocketAddr;
 use std::net::UdpSocket;
-use std::rc::Rc;
-use std::time::Instant;
+use std::thread::sleep;
 
-use bomberhans_lib::game_state::*;
 use bomberhans_lib::network::*;
-use bomberhans_lib::utils::*;
 
-struct Game {
-    id: GameId,
-    game_static: Rc<GameStatic>,
-    server_state: GameState,
-    updates: Vec<Update>,
-}
-
-struct Lobby {
-    game_static: GameStatic,
-}
-
-enum ClientState {
-    Lurking,
-    Lobby(Rc<Lobby>),
-    Game(Rc<Game>),
-}
-
-struct Client {
-    pub cookie: ClientId,
-    pub address: SocketAddr,
-    pub state: ClientState,
-    pub last_communication: Instant,
-}
-
-struct Server {
-    name: String,
-    games: HashMap<GameId, Rc<Game>>,
-    lobbies: HashMap<LobbyId, Rc<Lobby>>,
-    clients: HashMap<ClientId, Client>,
-}
-
-impl Server {
-    fn new(name: String, socket: UdpSocket) -> Self {
-        let games = HashMap::new();
-        let lobbies = HashMap::new();
-        let clients = HashMap::new();
-
-        Self {
-            name,
-            games,
-            lobbies,
-            clients,
-        }
-    }
-
-    fn handle_client_helo(
-        &mut self,
-        address: SocketAddr,
-        update: ClientHello,
-    ) -> Option<ServerHello> {
-        let mut h = std::hash::DefaultHasher::new();
-        address.hash(&mut h);
-        update.name.hash(&mut h);
-        let cookie = h.finish();
-        let cookie = ClientId::new(cookie);
-
-        let state = ClientState::Lurking;
-        let last_communication = Instant::now();
-
-        let client = Client {
-            cookie,
-            address,
-            state,
-            last_communication,
-        };
-
-        self.clients.insert(cookie, client);
-
-        let name = self.name.clone();
-        let games = self
-            .games
-            .value()
-            .map(|g| (g.id, g.game_static.name.clone()));
-
-        return Some(ServerHello {});
-    }
-
-    fn handle_client_update(&mut self, update: ClientUpdate) {}
-}
+mod server;
 
 fn serve() -> Result<(), Box<dyn Error>> {
-    let s = UdpSocket::bind("0.0.0.0:4267")?;
+    let socket = UdpSocket::bind("0.0.0.0:4267")?;
+    socket.set_nonblocking(true)?;
+
+    let mut server = server::Server::new("HansServer".to_owned());
+
     let mut buf = [0; 1024];
 
     loop {
-        let (amt, src) = socket.recv_from(&mut buf)?;
-        println!("Received {amt} bytes from {src}");
-
-        socket.send_to(&buf[..amt], src)?;
+        for _ in 0..15 {
+            match socket.recv_from(&mut buf) {
+                Ok((received_bytes, client_address)) => {
+                    if let Some(msg) = decode::<ClientMessage>(&buf[..received_bytes]) {
+                        let response = server.handle_client_message(msg, client_address);
+                        if let Some(response) = response {
+                            let data = encode(&response);
+                            socket.send_to(&data, client_address)?;
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+            sleep(std::time::Duration::from_millis(1))
+        }
+        let updates = server.periodic_update();
+        for (adr, msg) in updates {
+            let data = encode(&msg);
+            socket.send_to(&data, adr)?;
+        }
     }
 }
 

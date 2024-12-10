@@ -14,13 +14,10 @@ use crate::utils::PlayerId;
 use crate::utils::Position;
 use crate::utils::TimeStamp;
 use crate::utils::TICKS_PER_SECOND;
-use crate::utils::TIME_PER_TICK;
-use std::collections::VecDeque;
 use std::fmt;
 use std::rc::Rc;
-use std::time;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
     /// Name the player chose
     pub name: String,
@@ -111,11 +108,11 @@ impl PlayerState {
 }
 
 /// Constants of an active Game
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GameStatic {
     pub players: Vec<Player>,
     pub settings: Settings,
-    pub local_player: PlayerId,
+    pub local_player: PlayerId, // TODO: remove from game_static, into Client::Game or something
 }
 
 #[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -186,13 +183,18 @@ impl GameState {
         self.increment_game_time();
     }
 
-    pub fn set_player_action(&mut self, player_id: PlayerId, action: Action) {
+    /// Set Player Action
+    ///
+    /// return true if this changed the player's current action
+    pub fn set_player_action(&mut self, player_id: PlayerId, action: Action) -> bool {
         let player_state = &mut self.player_states[player_id.0];
 
-        if player_state.action != action {
+        let new = player_state.action != action;
+        if new {
             log::debug!("{:?} {:?}.action := {:?}", self.time, player_id, action);
+            player_state.action = action;
         }
-        player_state.action = action;
+        return new;
     }
 }
 
