@@ -17,8 +17,9 @@ fn main() {
     }
     println!("cargo:rustc-env=VERSION={git_version}");
 
-    let output = Command::new("touch") // modify self to re-run git describe next time
-        .arg("build.rs")
-        .spawn()
-        .expect("can start touch");
+    // TODO: The following is super annoying if nothing ahs changed !
+    // let output = Command::new("touch") // modify self to re-run git describe next time
+    //     .arg("build.rs")
+    //     .spawn()
+    //     .expect("can start touch");
 }

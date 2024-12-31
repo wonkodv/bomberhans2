@@ -1,6 +1,8 @@
 use std::io::Write;
 
 use std::error::Error;
+use std::net::Ipv6Addr;
+use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::thread::sleep;
 
@@ -9,7 +11,9 @@ use bomberhans_lib::network::*;
 mod server;
 
 fn serve() -> Result<(), Box<dyn Error>> {
-    let socket = UdpSocket::bind("0.0.0.0:4267")?;
+    let addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 4267); // TODO: make port / ip configurable
+    let socket = UdpSocket::bind(addr)?;
+    log::info!("Listening on {addr}");
     socket.set_nonblocking(true)?;
 
     let mut server = server::Server::new("HansServer".to_owned());
@@ -23,6 +27,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
                     if let Some(msg) = decode::<ClientMessage>(&buf[..received_bytes]) {
                         let response = server.handle_client_message(msg, client_address);
                         if let Some(response) = response {
+                            log::debug!("sending to {client_address}: {response:#?}");
                             let data = encode(&response);
                             socket.send_to(&data, client_address)?;
                         }
@@ -37,6 +42,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
         }
         let updates = server.periodic_update();
         for (adr, msg) in updates {
+            log::debug!("sending to {adr}: {msg:#?}");
             let data = encode(&msg);
             socket.send_to(&data, adr)?;
         }

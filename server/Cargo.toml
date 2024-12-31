@@ -10,6 +10,8 @@ bomberhans-lib = { workspace = true }
 log            = { workspace = true }
 serde          = { workspace = true }
 env_logger     = { workspace = true }
+rand           = { workspace = true }
+tokio          = { workspace = true }
 
 [lints]
 workspace = true

@@ -2,7 +2,7 @@ use bomberhans_lib::field::Field;
 use bomberhans_lib::game_state::{Action, GameState, GameStatic, Player};
 use bomberhans_lib::settings::Settings;
 use bomberhans_lib::utils::{PlayerId, Position, TimeStamp, TIME_PER_TICK};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 use std::time;
 
@@ -72,17 +72,22 @@ impl Game {
 
         let local_player = PlayerId(0);
 
-        let players: Vec<Player> = (0..(settings.players as usize))
-            .map(|id| Player {
-                name: {
-                    if id == local_player.0 {
-                        format!("Player {id}")
-                    } else {
-                        "Local Player".into()
-                    }
-                },
-                id: PlayerId(id as _),
-                start_position: Position::from_cell_position(start_positions[id]),
+        let players: BTreeMap<PlayerId, Player> = (0..(settings.players as usize))
+            .map(|id| {
+                (
+                    PlayerId(id),
+                    Player {
+                        name: {
+                            if id == local_player.0 {
+                                format!("Player {id}")
+                            } else {
+                                "Local Player".into()
+                            }
+                        },
+                        id: PlayerId(id as _),
+                        start_position: Position::from_cell_position(start_positions[id]),
+                    },
+                )
             })
             .collect();
 
@@ -105,7 +110,7 @@ impl Game {
         settings: Settings,
         socket: (),
         local_player: PlayerId,
-        players: Vec<Player>,
+        players: BTreeMap<PlayerId, Player>,
     ) -> Self {
         let game_static = GameStatic {
             players,

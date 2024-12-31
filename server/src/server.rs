@@ -15,6 +15,14 @@ enum Game {
     Lobby(Lobby),
     Started(StartedGame),
 }
+impl Game {
+    fn remove_player(&mut self, player_id: PlayerId) {
+        match self {
+            Game::Lobby(lobby) => lobby.game_static.players.remove(&player_id),
+            Game::Started(game) => todo!(),
+        };
+    }
+}
 
 struct Lobby {
     id: GameId,
@@ -42,7 +50,7 @@ struct ClientGame {
 
 struct Client {
     /// Session Cookie
-    pub cookie: ClientId,
+    pub id: ClientId,
 
     /// Client's Player Name
     pub name: String,
@@ -77,15 +85,52 @@ impl Server {
         msg: ClientMessage,
         client_address: SocketAddr,
     ) -> Option<ServerMessage> {
+        log::debug!("Received from {client_address}: {msg:#?}");
+
         match msg {
+            ClientMessage::OpenNewLobby(client_id)
+            | ClientMessage::Update(ClientUpdate { client_id, .. })
+            | ClientMessage::Bye(client_id) => {
+                if let Some(client) = self.clients.get_mut(&client_id) {
+                    if client.address != client_address {
+                        log::warn!(
+                            "discarding message from {} for {:#?} whose hello-address was {}",
+                            client_address,
+                            client_id,
+                            client.address
+                        );
+                        return None;
+                    }
+                } else {
+                    log::warn!("discarding message from {client_address} for unknown client {client_id:?}: {msg:#?}");
+                    return None;
+                }
+            }
+            _ => (),
+        }
+
+        match msg {
+            ClientMessage::Hello(msg) => self
+                .handle_client_helo(msg, client_address)
+                .map(|msg| ServerMessage::Hello(msg)),
+            ClientMessage::OpenNewLobby(msg) => self
+                .handle_client_open_new_lobby(msg, client_address)
+                .map(|msg| ServerMessage::LobbyUpdate(msg)),
             ClientMessage::Update(msg) => {
                 self.handle_client_update(msg, client_address);
                 None
             }
-            ClientMessage::Hello(msg) => self
-                .handle_client_helo(msg, client_address)
-                .map(|msg| ServerMessage::Hello(msg)),
-            ClientMessage::Bye => todo!(),
+            ClientMessage::Bye(client_id) => {
+                let client = self.clients.remove(&client_id).unwrap();
+
+                if let Some(game) = client.game {
+                    self.games
+                        .get_mut(&game.game_id)
+                        .unwrap()
+                        .remove_player(game.player_id);
+                }
+                None
+            }
         }
     }
 
@@ -94,6 +139,10 @@ impl Server {
         message: ClientHello,
         client_address: SocketAddr,
     ) -> Option<ServerHello> {
+        if message.magic != BOMBERHANS_MAGIC_NO_V1 {
+            return None;
+        }
+
         let mut h = std::hash::DefaultHasher::new();
         client_address.hash(&mut h);
         message.player_name.hash(&mut h);
@@ -104,7 +153,7 @@ impl Server {
 
         let client = Client {
             name: message.player_name,
-            cookie,
+            id: cookie,
             address: client_address,
             game: None,
         };
@@ -123,16 +172,17 @@ impl Server {
 
         return Some(ServerHello {
             server_name,
-            cookie,
+            client_id: cookie,
             lobbies,
+            clients_nonce: message.nonce,
         });
     }
 
     fn handle_client_update(&mut self, msg: ClientUpdate, client_address: SocketAddr) {
-        let Some(client) = self.clients.get_mut(&msg.cookie) else {
+        let Some(client) = self.clients.get_mut(&msg.client_id) else {
             log::warn!(
                 "update for unknown client {:?} from {}",
-                msg.cookie,
+                msg.client_id,
                 client_address
             );
             return;
@@ -140,7 +190,7 @@ impl Server {
         if client.address != client_address {
             log::warn!(
                 "update for client {:?} from wrong address {}",
-                msg.cookie,
+                msg.client_id,
                 client_address
             );
             return;
@@ -221,5 +271,14 @@ impl Server {
                 ))
             })
             .collect()
+    }
+
+    fn handle_client_open_new_lobby(
+        &mut self,
+        msg: ClientId,
+        client_address: SocketAddr,
+    ) -> Option<ServerLobbyUpdate> {
+        let game_id = GameId::new(rand::random());
+        todo!();
     }
 }

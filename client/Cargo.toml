@@ -5,11 +5,15 @@ edition = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+default-run = "bomberhans2" # TODO: Why here and not in the Workspace's cargo.toml? Error message is not helpful
+
 [dependencies]
 bomberhans-lib = { workspace = true }
 log            = { workspace = true }
 serde          = { workspace = true }
 env_logger     = { workspace = true }
+rand           = { workspace = true }
+tokio          = { workspace = true }
 
 confy  = "0.5.1"
 eframe = "0.20.1"

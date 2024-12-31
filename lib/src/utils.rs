@@ -90,7 +90,7 @@ impl fmt::Debug for Duration {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PlayerId(pub usize);
 
 impl fmt::Debug for PlayerId {

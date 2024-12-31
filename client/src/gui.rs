@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::rc::Rc;
 
 use eframe::egui;
@@ -9,7 +10,11 @@ use egui::Rect;
 use egui::Shape;
 use egui::TextureHandle;
 use egui::TextureId;
+use serde::Deserialize;
+use serde::Serialize;
 
+use crate::connection::connect;
+use crate::connection::Connection;
 use crate::game::Game;
 use bomberhans_lib::field::Cell;
 use bomberhans_lib::game_state::Action;
@@ -23,15 +28,21 @@ use bomberhans_lib::utils::TICKS_PER_SECOND;
 
 const PIXEL_PER_CELL: f32 = 42.0;
 
-enum Step {
+enum State {
     Initial,
+    SinglePlayerSettings,
+    MultiPlayerConnectingToServer,
+    MultiPlayerServerView,
+    MultiPlayerServerGuest,
+    MultiPlayerServerHost,
     Game(Game),
     GameOver(String),
+    MpOpeningLobby,
 }
 
-impl Step {
+impl State {
     fn game(&mut self) -> &mut Game {
-        if let Step::Game(game) = self {
+        if let State::Game(game) = self {
             game
         } else {
             panic!("no game running");
@@ -55,17 +66,6 @@ fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
 }
 
 pub fn gui() {
-    let settings: Settings = match confy::load("bomberhans2", Some("new_game_settings")) {
-        Ok(settings) => {
-            log::info!("Settings stored");
-            settings
-        }
-        Err(e) => {
-            log::error!("Error storing config: {e}");
-            Settings::default()
-        }
-    };
-
     let options = eframe::NativeOptions {
         initial_window_size: Some(egui::vec2(600.0, 600.0)),
         ..Default::default()
@@ -75,11 +75,11 @@ pub fn gui() {
         options,
         Box::new(|_cc| {
             Box::new(MyApp {
-                step: Step::Initial,
-                settings,
-                player_name: "New Player".into(),
+                state: State::Initial,
+                app_settings: AppSettings::load(),
                 textures: None,
                 walking_directions: DirectionStack::new(),
+                connection: None,
             })
         }),
     );
@@ -151,14 +151,56 @@ impl DirectionStack {
     }
 }
 
-struct MyApp {
-    step: Step,
-    settings: Settings,
+#[derive(Debug, Serialize, Deserialize)]
+struct AppSettings {
+    // TODO: When strings come after Structs, Toml Serializing fails. Ditch Confy, roll my own
+    // thing !
     player_name: String,
+    server: String,
+    game_settings: Settings,
+}
 
+impl AppSettings {
+    fn save(&self) {
+        match confy::store("bomberhans2", Some("client"), self) {
+            Ok(()) => log::info!("Settings stored"),
+            Err(e) => log::error!("Error storing config: {e}"),
+        }
+    }
+
+    fn load() -> Self {
+        match confy::load("bomberhans2", Some("client")) {
+            Ok(settings) => {
+                log::info!("Settings loaded");
+                settings
+            }
+            Err(e) => {
+                log::error!("Error restoring settings: {e:?}");
+                Self::default()
+            }
+        }
+    }
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            game_settings: Settings::default(),
+            player_name: String::from("Hans"),
+            server: String::from("[::1]:4267"),
+        }
+    }
+}
+
+struct MyApp {
+    state: State,
     walking_directions: DirectionStack,
-
     textures: Option<Rc<TextureManager>>,
+
+    app_settings: AppSettings,
+
+    // TODO: The following values should live in step
+    connection: Option<Connection>,
 }
 
 impl MyApp {
@@ -171,14 +213,14 @@ impl MyApp {
     }
 
     #[allow(clippy::too_many_lines)] // GUI code has to be long and ugly
-    fn update_initial(&mut self, ui: &mut egui::Ui) {
+    fn update_singleplayer_settings(&mut self, ui: &mut egui::Ui) {
         let textures = self.textures(ui.ctx());
 
-        let settings = &mut self.settings;
+        let settings = &mut self.app_settings.game_settings;
 
         ui.style_mut().spacing.slider_width = 300.0;
 
-        if let Step::GameOver(s) = &self.step {
+        if let State::GameOver(s) = &self.state {
             ui.label(format!("GameOver: {s}"));
         }
         ui.add(egui::TextEdit::singleline(&mut settings.game_name))
@@ -369,12 +411,10 @@ impl MyApp {
         });
         ui.horizontal(|ui| {
             if ui.button("Restore Default Settings").clicked() {
-                self.settings = Settings::default();
+                self.app_settings.game_settings = Settings::default();
             }
 
-            let start_button = ui
-                .button("Start local Game")
-                .on_hover_text("Start a local Game without network players");
+            let start_button = ui.button("Start").on_hover_text("Start local game");
             {
                 let mut memory = ui.memory();
                 if memory.focus().is_none() {
@@ -383,18 +423,14 @@ impl MyApp {
             }
 
             if start_button.clicked() {
-                match confy::store("bomberhans2", Some("new_game_settings"), &self.settings) {
-                    Ok(()) => log::info!("Settings stored"),
-                    Err(e) => log::error!("Error storing config: {e}"),
-                }
-
-                let game = Game::new_local_game(self.settings.clone());
-                self.step = Step::Game(game);
+                todo!("update settings, save");
+                let game = Game::new_local_game(self.app_settings.game_settings.clone());
+                self.state = State::Game(game);
                 return;
             }
 
             if ui.button("Don't click").clicked() {
-                println!("Don't click!");
+                panic!("Don't click!");
             }
         });
     }
@@ -405,7 +441,7 @@ impl MyApp {
     }
 
     fn update_game_inputs(&mut self, ui: &mut egui::Ui) {
-        let game = self.step.game();
+        let game = self.state.game();
 
         for (key, direction) in [
             (egui::Key::W, Direction::North),
@@ -431,10 +467,10 @@ impl MyApp {
 
         let game_over = ui
             .horizontal(|ui| {
-                ui.label(&self.step.game().settings().game_name);
+                ui.label(&self.state.game().settings().game_name);
                 let button = ui.button("Stop Game");
                 if button.clicked() {
-                    self.step = Step::GameOver("You pressed Stop".to_owned());
+                    self.state = State::GameOver("You pressed Stop".to_owned());
                     true
                 } else {
                     false
@@ -445,7 +481,7 @@ impl MyApp {
             return;
         };
 
-        let step = &mut self.step;
+        let step = &mut self.state;
         let game = step.game();
 
         let width = (game.settings().width + 2) as f32 * PIXEL_PER_CELL;
@@ -486,7 +522,7 @@ impl MyApp {
 
         let time = game.local_state().time;
 
-        painter.extend(game.local_state().player_states.iter().map(|player| {
+        painter.extend(game.local_state().player_states.values().map(|player| {
             Shape::image(
                 textures.get_player(player, time),
                 player_rect(player.position, game_field.rect.min),
@@ -499,15 +535,132 @@ impl MyApp {
                 1.0 / TICKS_PER_SECOND as f32,
             ));
     }
+
+    fn update_initial(&mut self, ui: &mut egui::Ui) {
+        ui.add(egui::TextEdit::singleline(
+            &mut self.app_settings.player_name,
+        ))
+        .on_hover_text("Player Name");
+        ui.horizontal(|ui| {
+            let local_button = ui
+                .button("Single Player")
+                .on_hover_text("Start a local Game without network players");
+
+            if local_button.clicked() {
+                self.app_settings.save(); // TODO: should only save game-settings?
+                self.state = State::SinglePlayerSettings;
+            }
+        });
+        ui.horizontal(|ui| {
+            let server_text_edit = ui.add(egui::TextEdit::singleline(&mut self.app_settings.server));
+
+            let connect_button = ui.button("Connect").on_hover_text("Connect to Server");
+            {
+                let mut memory = ui.memory();
+                if memory.focus().is_none() {
+                    memory.request_focus(connect_button.id); // TODO: this flickers
+                }
+            }
+
+
+            let server = self.app_settings.server.parse::<SocketAddr>();
+            match server {
+                Err(err) => {
+                    server_text_edit.on_hover_text(&format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Problem: {err:#?}"));
+                    // TODO: make the textedit red
+                }
+                Ok(server) => {
+                server_text_edit.on_hover_text(&format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Value: {server:#?}"));
+                if connect_button.clicked() {
+                    self.app_settings.save(); // TODO: should only save server
+
+                    self.connection = Some(connect(server, self.app_settings.player_name.clone()));
+                    self.state = State::MultiPlayerConnectingToServer; // TODO: connection should
+                                                                     // live in step
+                }
+                }
+            }
+
+
+
+        });
+    }
+
+    fn update_multiplayer_view(&mut self, ui: &mut egui::Ui) {
+        let connection = self.connection.as_ref().unwrap();
+        if let Some(Ok((lobbies, server_info))) = connection.get_server_info() {
+            ui.heading(&format!(
+                "Multiplayer Games on {} ({}), Ping {:.1}",
+                server_info.server_name,
+                connection.server,
+                server_info.ping.as_secs_f32() / 1000.0
+            ));
+            for (game_id, game_name) in lobbies {
+                ui.horizontal(|ui| {
+                    if ui.button("Join").clicked() {
+                        todo!("join {game_id:?}");
+                    }
+                    ui.label(game_name);
+                });
+            }
+            if ui.button("Host new Game").clicked() {
+                connection.open_new_lobby();
+                self.state = State::MpOpeningLobby;
+            }
+        };
+    }
+
+    fn update_multiplayer_guest(&self, ui: &mut egui::Ui) {
+        todo!()
+    }
+
+    fn update_multiplayer_host(&self, ui: &mut egui::Ui) {
+        todo!()
+    }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Bomberhans");
-            match self.step {
-                Step::GameOver(_) | Step::Initial => self.update_initial(ui),
-                Step::Game(_) => self.update_game(ui),
+            match self.state {
+                State::Initial => self.update_initial(ui),
+                State::GameOver(_) | State::SinglePlayerSettings => {
+                    self.update_singleplayer_settings(ui)
+                }
+                State::Game(_) => self.update_game(ui),
+                State::MultiPlayerConnectingToServer => {
+                    let connection = self.connection.as_ref().unwrap();
+                    match connection.get_server_info() {
+                        Some(Ok(server_info)) => {
+                            self.state = State::MultiPlayerServerView;
+                            self.update_multiplayer_view(ui);
+                        }
+                        Some(Err(err)) => {
+                            let server = connection.server;
+                            self.update_initial(ui);
+                            ui.label(&format!("Error connecting to {}: {}", server, err));
+                        }
+                        None => {
+                            ui.label(&format!(
+                                "connecting to {}",
+                                self.connection.as_ref().unwrap().server
+                            ));
+                            if ui.button("Cancel ").clicked() {
+                                self.state = State::Initial;
+                            }
+                        }
+                    }
+                }
+                State::MultiPlayerServerView => self.update_multiplayer_view(ui),
+                State::MpOpeningLobby => {
+                    ui.label(&format!("Waiting for new Lobby to open",));
+                    if ui.button("Cancel ").clicked() {
+                        self.state = State::Initial;
+                    }
+                }
+                State::MultiPlayerServerGuest => self.update_multiplayer_guest(ui),
+                State::MultiPlayerServerHost => self.update_multiplayer_host(ui),
             }
         });
         if !frame.is_web() {

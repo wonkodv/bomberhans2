@@ -6,7 +6,7 @@ use crate::game_state::GameStatic;
 use crate::utils::PlayerId;
 use crate::utils::TimeStamp;
 
-const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
+pub const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ClientId(u64);
@@ -27,12 +27,24 @@ impl GameId {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientHello {
+    /// Identifying the protocol
+    pub magic: u32,
+
+    /// Unique number of this packet, to associate the server's response to a packet, to compute
+    /// the ping
+    pub nonce: u32,
+
+    /// the player's name
     pub player_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServerHello {
-    pub cookie: ClientId,
+    /// nonce of the ClientHello
+    pub clients_nonce: u32,
+
+    /// Session cookie to identify the client again later
+    pub client_id: ClientId,
 
     pub server_name: String,
 
@@ -54,7 +66,7 @@ pub struct ServerLobbyUpdate {
 /// Periodic Client to Server update
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientUpdate {
-    pub cookie: ClientId,
+    pub client_id: ClientId,
 
     /// Time of the most recently received server update
     pub last_server_update: TimeStamp,
@@ -90,16 +102,17 @@ pub struct Update {
 /// A Message from Client to Server
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
-    Update(ClientUpdate),
     Hello(ClientHello),
-    Bye,
+    OpenNewLobby(ClientId),
+    Update(ClientUpdate),
+    Bye(ClientId),
 }
 
 /// A Message from Server to Client
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
-    Update(ServerUpdate),
     Hello(ServerHello),
+    Update(ServerUpdate),
     LobbyUpdate(ServerLobbyUpdate),
 }
 
