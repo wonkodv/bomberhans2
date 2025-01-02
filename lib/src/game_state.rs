@@ -525,9 +525,9 @@ mod test {
         let players = vec![player1];
 
         let mut gs = GameState::new(settings, players);
-        gs.player_states[0].current_bombs_placed = 42; // Hack, so bombs can explode without int
-                                                       // underrun. If a test cares, it should set
-                                                       // this correctly
+        gs.players.get_mut(&PlayerId(0)).unwrap().1.current_bombs_placed = 42; // Hack, so bombs can explode without int
+                                                                               // underrun. If a test cares, it should set
+                                                                               // this correctly
         gs
     }
 
@@ -543,7 +543,10 @@ mod test {
         gs.update_field();
 
         assert_eq!(orig_gs.field, gs.field);
-        assert_eq!(orig_gs.player_states, gs.player_states);
+        assert_eq!(
+            orig_gs.players.values().map(|(player, state)| state).collect::<Vec<_>>(),
+            gs.players.values().map(|(player, state)| state).collect::<Vec<_>>()
+        );
     }
 
     fn field_looks_equal(actual: &Field, expected: &str) -> bool {
@@ -632,9 +635,9 @@ mod test {
     fn test_bomb_explosion_counts_placed_bombs() {
         let mut gs = game();
         gs.field[CellPosition::new(1, 1)] = Cell::Bomb { owner: PlayerId(0), power: 1, expire: gs.time };
-        gs.player_states[0].current_bombs_placed = 42;
+        gs.players.get_mut(&PlayerId(0)).unwrap().1.current_bombs_placed = 42;
         gs.update_field();
-        assert_eq!(gs.player_states[0].current_bombs_placed, 41);
+        assert_eq!(gs.players[&PlayerId(0)].1.current_bombs_placed, 41);
     }
     #[test]
     fn test_walls_catch_fire() {
