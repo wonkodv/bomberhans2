@@ -27,6 +27,7 @@
             fontconfig
             gdb
             gnumake
+            just
             llvmPackages_latest.bintools
             pkg-config
             pre-commit

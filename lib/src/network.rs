@@ -2,7 +2,8 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::game_state::Action;
-use crate::game_state::GameStatic;
+use crate::game_state::Player;
+use crate::settings::Settings;
 use crate::utils::PlayerId;
 use crate::utils::TimeStamp;
 
@@ -25,23 +26,16 @@ impl GameId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientHello {
-    /// Identifying the protocol
-    pub magic: u32,
-
-    /// Unique number of this packet, to associate the server's response to a packet, to compute
-    /// the ping
-    pub nonce: u32,
-
     /// the player's name
     pub player_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerHello {
-    /// nonce of the ClientHello
-    pub clients_nonce: u32,
+    /// Number of the packet we are responding to
+    pub clients_packet_number: u32,
 
     /// Session cookie to identify the client again later
     pub client_id: ClientId,
@@ -51,20 +45,21 @@ pub struct ServerHello {
     pub lobbies: Vec<(GameId, String)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientJoinLobby {
     pub lobby: GameId,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerLobbyUpdate {
-    client_player_id: PlayerId,
-
-    game: GameStatic,
+    pub id: GameId,
+    pub settings: Settings,
+    pub players: Vec<Player>,
+    pub client_player_id: PlayerId,
 }
 
 /// Periodic Client to Server update
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientUpdate {
     pub client_id: ClientId,
 
@@ -79,7 +74,7 @@ pub struct ClientUpdate {
 }
 
 /// Periodic Server to Client update
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerUpdate {
     /// Current Server Time
     pub time: TimeStamp,
@@ -100,7 +95,7 @@ pub struct Update {
 }
 
 /// A Message from Client to Server
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     Hello(ClientHello),
     OpenNewLobby(ClientId),
@@ -108,12 +103,26 @@ pub enum ClientMessage {
     Bye(ClientId),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientPacket {
+    pub magic: u32,
+    pub packet_number: u32,
+    pub message: ClientMessage,
+}
+
 /// A Message from Server to Client
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     Hello(ServerHello),
     Update(ServerUpdate),
     LobbyUpdate(ServerLobbyUpdate),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerPacket {
+    pub magic: u32,
+    pub packet_number: u32,
+    pub message: ServerMessage,
 }
 
 pub fn encode<S>(value: &S) -> Vec<u8>

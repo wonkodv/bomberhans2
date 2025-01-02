@@ -3,22 +3,33 @@ use std::hash::Hash as _;
 use std::hash::Hasher as _;
 
 use std::net::SocketAddr;
-use std::rc::Rc;
 use std::time::Instant;
 
+use bomberhans_lib::field::Field;
 use bomberhans_lib::game_state::*;
 use bomberhans_lib::network::*;
+use bomberhans_lib::settings::Settings;
 use bomberhans_lib::utils::PlayerId;
+use bomberhans_lib::utils::Position;
 use bomberhans_lib::utils::TimeStamp;
 
 enum Game {
     Lobby(Lobby),
     Started(StartedGame),
 }
+
 impl Game {
     fn remove_player(&mut self, player_id: PlayerId) {
         match self {
-            Game::Lobby(lobby) => lobby.game_static.players.remove(&player_id),
+            Game::Lobby(lobby) => {
+                lobby.players.remove(
+                    lobby
+                        .players
+                        .iter()
+                        .position(|p| p.id == player_id)
+                        .expect("player to remove exists"),
+                );
+            }
             Game::Started(game) => todo!(),
         };
     }
@@ -26,12 +37,12 @@ impl Game {
 
 struct Lobby {
     id: GameId,
-    game_static: GameStatic,
+    settings: Settings,
+    players: Vec<Player>,
 }
 
 struct StartedGame {
     id: GameId,
-    game_static: Rc<GameStatic>,
     game_state: GameState,
     updates: Vec<Update>,
     future_updates: Vec<Update>,
@@ -60,12 +71,20 @@ struct Client {
 
     /// The Client's Game if any
     game: Option<ClientGame>,
+
+    /// Number of the most recent packet, that we have received
+    last_received_packet_number: u32,
 }
+
+impl Client {}
 
 pub struct Server {
     name: String,
     games: HashMap<GameId, Game>,
     clients: HashMap<ClientId, Client>,
+
+    /// Number of the packet we most recently sent
+    last_sent_packet_number: u32,
 }
 
 impl Server {
@@ -77,17 +96,21 @@ impl Server {
             name,
             games,
             clients,
+            last_sent_packet_number: 1,
         }
     }
 
-    pub fn handle_client_message(
+    pub fn handle_client_packet(
         &mut self,
-        msg: ClientMessage,
+        packet: ClientPacket,
         client_address: SocketAddr,
-    ) -> Option<ServerMessage> {
-        log::debug!("Received from {client_address}: {msg:#?}");
+    ) -> Option<ServerPacket> {
+        if packet.magic != BOMBERHANS_MAGIC_NO_V1 {
+            log::warn!("ignoring unknown protocol {packet:?}");
+            return None;
+        }
 
-        match msg {
+        match &packet.message {
             ClientMessage::OpenNewLobby(client_id)
             | ClientMessage::Update(ClientUpdate { client_id, .. })
             | ClientMessage::Bye(client_id) => {
@@ -100,18 +123,27 @@ impl Server {
                             client.address
                         );
                         return None;
+
+                        if packet.packet_number <= client.last_received_packet_number {
+                            log::warn!("ignoring out of order packet {packet:?}");
+                            return None;
+                        }
+
+                        client.last_received_packet_number = packet.packet_number;
                     }
                 } else {
-                    log::warn!("discarding message from {client_address} for unknown client {client_id:?}: {msg:#?}");
+                    log::warn!("discarding packet from {client_address} for unknown client {client_id:?}: {packet:#?}");
                     return None;
                 }
             }
             _ => (),
         }
 
-        match msg {
+        log::debug!("Received from {client_address}: {packet:#?}");
+
+        let message = match packet.message {
             ClientMessage::Hello(msg) => self
-                .handle_client_helo(msg, client_address)
+                .handle_client_helo(msg, packet.packet_number, client_address)
                 .map(|msg| ServerMessage::Hello(msg)),
             ClientMessage::OpenNewLobby(msg) => self
                 .handle_client_open_new_lobby(msg, client_address)
@@ -129,20 +161,28 @@ impl Server {
                         .unwrap()
                         .remove_player(game.player_id);
                 }
+                // TODO: send LobbyUpdate to all other Players
                 None
             }
-        }
+        };
+
+        message.map(|message| {
+            self.last_sent_packet_number += 1;
+
+            ServerPacket {
+                magic: BOMBERHANS_MAGIC_NO_V1,
+                packet_number: self.last_sent_packet_number,
+                message,
+            }
+        })
     }
 
     fn handle_client_helo(
         &mut self,
         message: ClientHello,
+        clients_packet_number: u32,
         client_address: SocketAddr,
     ) -> Option<ServerHello> {
-        if message.magic != BOMBERHANS_MAGIC_NO_V1 {
-            return None;
-        }
-
         let mut h = std::hash::DefaultHasher::new();
         client_address.hash(&mut h);
         message.player_name.hash(&mut h);
@@ -156,6 +196,7 @@ impl Server {
             id: cookie,
             address: client_address,
             game: None,
+            last_received_packet_number: 0,
         };
 
         self.clients.insert(cookie, client);
@@ -165,7 +206,7 @@ impl Server {
             .games
             .values()
             .filter_map(|g| match g {
-                Game::Lobby(lob) => Some((lob.id, lob.game_static.settings.game_name.clone())),
+                Game::Lobby(lob) => Some((lob.id, lob.settings.game_name.clone())),
                 Game::Started(_) => None,
             })
             .collect();
@@ -174,7 +215,7 @@ impl Server {
             server_name,
             client_id: cookie,
             lobbies,
-            clients_nonce: message.nonce,
+            clients_packet_number,
         });
     }
 
@@ -275,10 +316,38 @@ impl Server {
 
     fn handle_client_open_new_lobby(
         &mut self,
-        msg: ClientId,
+        client_id: ClientId,
         client_address: SocketAddr,
     ) -> Option<ServerLobbyUpdate> {
-        let game_id = GameId::new(rand::random());
-        todo!();
+        let client = &self.clients[&client_id];
+
+        let id = GameId::new(rand::random());
+        let settings = Settings::default();
+
+        let field = Field::new(settings.width, settings.height);
+        let start_positions = field.start_positions();
+        let start_position = Position::from_cell_position(start_positions[0]);
+        let players = vec![Player {
+            name: client.name.clone(),
+            id: bomberhans_lib::utils::PlayerId(0),
+            start_position,
+        }];
+
+        let old = self.games.insert(
+            id,
+            Game::Lobby(Lobby {
+                id,
+                settings: settings.clone(),
+                players: players.clone(),
+            }),
+        );
+        assert!(old.is_none());
+
+        Some(ServerLobbyUpdate {
+            client_player_id: bomberhans_lib::utils::PlayerId(0),
+            settings,
+            players,
+            id,
+        })
     }
 }

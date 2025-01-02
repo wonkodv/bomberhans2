@@ -16,7 +16,6 @@ use crate::utils::TimeStamp;
 use crate::utils::TICKS_PER_SECOND;
 use std::collections::BTreeMap;
 use std::fmt;
-use std::rc::Rc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
@@ -108,14 +107,6 @@ impl PlayerState {
     }
 }
 
-/// Constants of an active Game
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GameStatic {
-    pub players: BTreeMap<PlayerId, Player>,
-    pub settings: Settings,
-    pub local_player: PlayerId, // TODO: remove from game_static, into Client::Game or something
-}
-
 #[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Action {
     pub walking: Option<Direction>,
@@ -149,37 +140,40 @@ impl fmt::Debug for Action {
 pub struct GameState {
     pub time: TimeStamp,
     pub field: Field,
-    pub player_states: BTreeMap<PlayerId, PlayerState>,
-    pub game: Rc<GameStatic>,
+    pub players: BTreeMap<PlayerId, (Player, PlayerState)>,
+    pub settings: Settings,
 }
 
 /// APIs
 impl GameState {
-    pub fn new(game: Rc<GameStatic>) -> Self {
+    pub fn new(settings: Settings, players: Vec<Player>) -> Self {
         let time = TimeStamp::default();
 
-        let player_states: BTreeMap<PlayerId, PlayerState> = game
-            .players
-            .iter()
-            .map(|(id, player)| (*id, PlayerState::new(player.start_position)))
+        let players: BTreeMap<PlayerId, (Player, PlayerState)> = players
+            .into_iter()
+            .map(|player| {
+                let start_position = player.start_position;
+                (player.id, (player, PlayerState::new(start_position)))
+            })
             .collect();
 
-        let field = Field::new_from_rules(&game.settings);
+        let field = Field::new_from_rules(&settings);
 
         Self {
             time,
             field,
-            player_states,
-            game,
+            players,
+            settings,
         }
     }
 
     pub fn simulate_1_update(&mut self) {
-        for i in 0..self.player_states.len() {
+        // collect IDs to appease borrow checker :/
+        let player_ids = self.players.keys().map(|&id| id).collect::<Vec<_>>();
+        player_ids.into_iter().for_each(|player_id| 
             // GAME_RULE: players with lower ID are processed earlier and win,
             // if both place bombs at the same spot 😎
-            self.update_player(PlayerId(i));
-        }
+            self.update_player(player_id));
         self.update_field();
         self.increment_game_time();
     }
@@ -188,7 +182,7 @@ impl GameState {
     ///
     /// return true if this changed the player's current action
     pub fn set_player_action(&mut self, player_id: PlayerId, action: Action) -> bool {
-        let player_state = self.player_states.get_mut(&player_id).unwrap();
+        let (player, player_state) = self.players.get_mut(&player_id).unwrap();
 
         let new = player_state.action != action;
         if new {
@@ -207,7 +201,8 @@ impl GameState {
 
     /// advance a player 1 tick
     fn update_player(&mut self, player_id: PlayerId) {
-        let action = self.player_states[&player_id].action;
+        let (player, player_state) = self.players.get_mut(&player_id).unwrap();
+        let action = player_state.action;
         if action.placing {
             self.place_bomb(player_id);
         }
@@ -217,8 +212,7 @@ impl GameState {
     }
 
     fn walk(&mut self, player_id: PlayerId) {
-        let player = &self.game.players[&player_id];
-        let player_state = &self.player_states[&player_id];
+        let (player, player_state) = self.players.get_mut(&player_id).unwrap();
 
         let direction = player_state
             .action
@@ -226,7 +220,6 @@ impl GameState {
             .expect("only call walking if player is walking");
 
         let mut walk_distance = self
-            .game
             .settings
             .get_update_walk_distance(player_state.speed)
             .try_into()
@@ -257,8 +250,7 @@ impl GameState {
     }
 
     fn walk_on_cell(&mut self, player_id: PlayerId, new_position: Position) {
-        let player = &self.game.players[&player_id];
-        let player_state = self.player_states.get_mut(&player_id).unwrap();
+        let (player, player_state) = self.players.get_mut(&player_id).unwrap();
         let cell_position = new_position.as_cell_pos();
         let cell = &self.field[cell_position];
         log::debug!(
@@ -276,7 +268,7 @@ impl GameState {
             }
             Cell::Bomb { .. } => {
                 if random(self.time, new_position.x, new_position.y) % 100
-                    < self.game.settings.bomb_walking_chance
+                    < self.settings.bomb_walking_chance
                 {
                     // GAME_RULE: walking on bombs randomly happens or doesn't, decided
                     // each update.
@@ -285,7 +277,7 @@ impl GameState {
             }
             Cell::TombStone { .. } => {
                 if random(self.time, new_position.x, new_position.y) % 100
-                    < self.game.settings.tombstone_walking_chance
+                    < self.settings.tombstone_walking_chance
                 {
                     // GAME_RULE: walking on tombstones randomly happens or doesn't, decided
                     // each update.
@@ -296,10 +288,7 @@ impl GameState {
                 // GAME_RULE: walking into fire counts as kill by fire owner
                 // TODO: seperate counter?
                 player_state.die(owner, player.start_position);
-                self.player_states
-                    .get_mut(&player_id)
-                    .unwrap()
-                    .score(player_id);
+                self.players.get_mut(&player_id).unwrap().1.score(player_id);
                 self.field[cell_position] = Cell::TombStone(player_id);
 
                 log::info!(
@@ -367,7 +356,8 @@ impl GameState {
     }
 
     fn place_bomb(&mut self, player_id: PlayerId) {
-        let player_state = self.player_states.get_mut(&player_id).unwrap();
+        let (player, player_state) = self.players.get_mut(&player_id).unwrap();
+
         // GAME RULE: can not place more bombs than you have bomb powerups
         if player_state.current_bombs_placed >= player_state.bombs {
             log::info!(
@@ -380,7 +370,7 @@ impl GameState {
             let position = match player_state.action.walking {
                 Some(direction) => player_state.position.add(
                     direction,
-                    -(self.game.settings.bomb_offset as i32 * 100 / Position::ACCURACY),
+                    -(self.settings.bomb_offset as i32 * 100 / Position::ACCURACY),
                 ),
                 None => player_state.position,
             };
@@ -412,7 +402,7 @@ impl GameState {
                     player_state.current_bombs_placed += 1;
                     *cell = Cell::Bomb {
                         owner: player_id,
-                        expire: self.time + self.game.settings.bomb_explode_time(),
+                        expire: self.time + self.settings.bomb_explode_time(),
                         // GAME_RULE: power is set AFTER eating powerups at cell
                         power: player_state.power,
                     };
@@ -453,9 +443,10 @@ impl GameState {
                 ..
             } => {
                 log::info!("{cell:?}: destroying {owner:?}'s bomb");
-                self.player_states
+                self.players
                     .get_mut(&bomb_owner)
                     .unwrap()
+                    .1
                     .current_bombs_placed -= 1;
 
                 // GAME_RULE: owner of secondary Bomb takes the credit
@@ -464,7 +455,7 @@ impl GameState {
             Cell::Upgrade(upgrade) => {
                 log::info!("{cell:?}: destroying {upgrade:?}");
 
-                (true, self.game.settings.upgrade_explosion_power, owner)
+                (true, self.settings.upgrade_explosion_power, owner)
             }
             Cell::Teleport => {
                 let explodes = if consider_tp {
@@ -491,11 +482,11 @@ impl GameState {
                 } else {
                     true
                 };
-                (explodes, self.game.settings.upgrade_explosion_power, owner)
+                (explodes, self.settings.upgrade_explosion_power, owner)
             }
             Cell::StartPoint | Cell::WoodBurning { .. } | Cell::Wall => (false, 0, owner),
             Cell::Wood => {
-                let expire = self.time + self.game.settings.wood_burn_time();
+                let expire = self.time + self.settings.wood_burn_time();
                 self.field[cell] = Cell::WoodBurning { expire };
                 log::info!("{cell:?}: setting wall on fire until {expire:?}");
                 (false, 0, owner)
@@ -504,12 +495,13 @@ impl GameState {
         if explodes {
             self.field[cell] = Cell::Fire {
                 owner,
-                expire: self.time + self.game.settings.fire_burn_time(),
+                expire: self.time + self.settings.fire_burn_time(),
             };
-            for (id, p) in self.player_states.iter_mut() {
-                if p.position.as_cell_pos() == cell {
-                    p.die(owner, self.game.players[&id].start_position);
-                    self.field[cell] = Cell::TombStone(*id);
+            // check which players were on the cell
+            for (player_id, (player, player_state)) in self.players.iter_mut() {
+                if player_state.position.as_cell_pos() == cell {
+                    player_state.die(owner, player.start_position);
+                    self.field[cell] = Cell::TombStone(*player_id);
                 }
             }
 
@@ -558,7 +550,7 @@ impl GameState {
                     assert!(expire >= self.time);
                     if expire == self.time {
                         let r = random(self.time, cell_idx.x, cell_idx.y);
-                        *cell = self.game.settings.ratios.random(r);
+                        *cell = self.settings.ratios.random(r);
                     }
                 }
 
@@ -591,15 +583,9 @@ mod test {
         let player1 = Player::new("test player 1".to_owned(), PlayerId(0), Position::new(0, 0));
         let local_player = player1.id;
         let settings = Settings::default();
-        let game = GameStatic {
-            players: vec![player1],
-            settings,
-            local_player,
-        };
+        let players = vec![player1];
 
-        let game = Rc::new(game);
-
-        let mut gs = GameState::new(game);
+        let mut gs = GameState::new(settings, players);
         gs.player_states[0].current_bombs_placed = 42; // Hack, so bombs can explode without int
                                                        // underrun. If a test cares, it should set
                                                        // this correctly

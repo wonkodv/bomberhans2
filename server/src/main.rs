@@ -24,8 +24,8 @@ fn serve() -> Result<(), Box<dyn Error>> {
         for _ in 0..15 {
             match socket.recv_from(&mut buf) {
                 Ok((received_bytes, client_address)) => {
-                    if let Some(msg) = decode::<ClientMessage>(&buf[..received_bytes]) {
-                        let response = server.handle_client_message(msg, client_address);
+                    if let Some(packet) = decode::<ClientPacket>(&buf[..received_bytes]) {
+                        let response = server.handle_client_packet(packet, client_address);
                         if let Some(response) = response {
                             log::debug!("sending to {client_address}: {response:#?}");
                             let data = encode(&response);
