@@ -8,7 +8,7 @@ use crate::field::Upgrade;
 use crate::utils::Duration;
 
 /// Ratios of Wood turning into those cell types:
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Ratios {
     pub power: u32,
     pub speed: u32,
@@ -21,37 +21,13 @@ pub struct Ratios {
 
 impl Default for Ratios {
     fn default() -> Self {
-        Self {
-            power: 8,
-            speed: 9,
-            bombs: 7,
-            teleport: 2,
-            wall: 0,
-            wood: 1,
-            clear: 20,
-        }
+        Self { power: 8, speed: 9, bombs: 7, teleport: 2, wall: 0, wood: 1, clear: 20 }
     }
 }
 
 impl Ratios {
-    pub fn new(
-        power: u32,
-        speed: u32,
-        bombs: u32,
-        teleport: u32,
-        wall: u32,
-        wood: u32,
-        clear: u32,
-    ) -> Self {
-        Self {
-            power,
-            speed,
-            bombs,
-            teleport,
-            wall,
-            wood,
-            clear,
-        }
+    pub fn new(power: u32, speed: u32, bombs: u32, teleport: u32, wall: u32, wood: u32, clear: u32) -> Self {
+        Self { power, speed, bombs, teleport, wall, wood, clear }
     }
 
     pub fn sum(&self) -> u32 {
@@ -106,19 +82,11 @@ impl Ratios {
         let wood = (self.wood as f32 * ratio).round() as u32;
         let clear = (self.clear as f32 * ratio).round() as u32;
 
-        Self {
-            power,
-            speed,
-            bombs,
-            teleport,
-            wall,
-            wood,
-            clear,
-        }
+        Self { power, speed, bombs, teleport, wall, wood, clear }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// Name of the game
     pub game_name: String,

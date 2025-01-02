@@ -76,11 +76,7 @@ impl Cell {
 
         let cell = match chr {
             '_' => Cell::Empty,
-            'B' => Cell::Bomb {
-                owner,
-                power,
-                expire,
-            },
+            'B' => Cell::Bomb { owner, power, expire },
             'F' => Cell::Fire { owner, expire },
             'D' => Cell::TombStone(owner),
             's' => Cell::Upgrade(Upgrade::Speed),
@@ -157,11 +153,7 @@ impl Field {
             })
             .collect();
 
-        Self {
-            width,
-            height,
-            cells,
-        }
+        Self { width, height, cells }
     }
 
     pub fn new_from_rules(settings: &Settings) -> Self {
@@ -185,11 +177,7 @@ impl Field {
     }
 
     pub fn new_from_string_grid(string: &str) -> Result<Self, String> {
-        let lines: Vec<&str> = string
-            .split('\n')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
+        let lines: Vec<&str> = string.split('\n').map(str::trim).filter(|s| !s.is_empty()).collect();
         if lines.is_empty() {
             return Err("0 rows".to_owned());
         }
@@ -207,19 +195,14 @@ impl Field {
             .enumerate()
             .flat_map(|(y, row)| {
                 row.chars().enumerate().map(move |(x, chr)| {
-                    Cell::from_char(chr)
-                        .map_err(|e| format!("Character for Cell {x}/{y} invalid: {e}"))
+                    Cell::from_char(chr).map_err(|e| format!("Character for Cell {x}/{y} invalid: {e}"))
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            width: width
-                .try_into()
-                .map_err(|err: std::num::TryFromIntError| err.to_string())?,
-            height: height
-                .try_into()
-                .map_err(|err: std::num::TryFromIntError| err.to_string())?,
+            width: width.try_into().map_err(|err: std::num::TryFromIntError| err.to_string())?,
+            height: height.try_into().map_err(|err: std::num::TryFromIntError| err.to_string())?,
             cells,
         })
     }
@@ -230,30 +213,19 @@ impl Field {
 
     pub fn iter_indices(&self) -> impl Iterator<Item = CellPosition> {
         let height = self.height;
-        (0..self.width as i32)
-            .flat_map(move |x| (0..height as i32).map(move |y| CellPosition::new(x, y)))
+        (0..self.width as i32).flat_map(move |x| (0..height as i32).map(move |y| CellPosition::new(x, y)))
     }
 
     pub fn iter_with_border(&self) -> impl Iterator<Item = (CellPosition, &Cell)> {
-        self.iter_indices_with_border()
-            .map(move |pos| (pos, &self[pos]))
+        self.iter_indices_with_border().map(move |pos| (pos, &self[pos]))
     }
     pub fn iter_indices_with_border(&self) -> impl Iterator<Item = CellPosition> {
         let height = self.height;
-        (-1..(self.width + 1) as i32)
-            .flat_map(move |x| (-1..(height + 1) as i32).map(move |y| CellPosition::new(x, y)))
+        (-1..(self.width + 1) as i32).flat_map(move |x| (-1..(height + 1) as i32).map(move |y| CellPosition::new(x, y)))
     }
 
     pub fn start_positions(&self) -> Vec<CellPosition> {
-        self.iter()
-            .filter_map(|(pos, cell)| {
-                if *cell == Cell::StartPoint {
-                    Some(pos)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        self.iter().filter_map(|(pos, cell)| if *cell == Cell::StartPoint { Some(pos) } else { None }).collect()
     }
 }
 
@@ -262,8 +234,7 @@ impl Index<CellPosition> for Field {
 
     fn index(&self, index: CellPosition) -> &Self::Output {
         if self.is_cell_in_field(index) {
-            &self.cells
-                [usize::try_from(index.y * self.width as i32 + index.x).expect("index fits usize")]
+            &self.cells[usize::try_from(index.y * self.width as i32 + index.x).expect("index fits usize")]
         } else {
             &Cell::Wall
         }
@@ -273,8 +244,7 @@ impl Index<CellPosition> for Field {
 impl IndexMut<CellPosition> for Field {
     fn index_mut(&mut self, index: CellPosition) -> &mut Self::Output {
         if self.is_cell_in_field(index) {
-            &mut self.cells
-                [usize::try_from(index.y * self.width as i32 + index.x).expect("index fits usize")]
+            &mut self.cells[usize::try_from(index.y * self.width as i32 + index.x).expect("index fits usize")]
         } else {
             panic!("y > height: {} > {}", index.y, self.height)
         }
@@ -287,10 +257,7 @@ struct FieldMutIterator<'f> {
 }
 impl<'f> FieldMutIterator<'f> {
     fn new(field: &'f mut Field) -> Self {
-        Self {
-            field,
-            pos: CellPosition::new(0, 0),
-        }
+        Self { field, pos: CellPosition::new(0, 0) }
     }
 }
 #[cfg(test)]
@@ -349,9 +316,7 @@ mod test {
             "
         .trim_start()
         .replace(' ', "");
-        let actual = Field::new_from_string_grid(&expected)
-            .unwrap()
-            .string_grid();
+        let actual = Field::new_from_string_grid(&expected).unwrap().string_grid();
         dbg!(&actual);
         dbg!(&expected);
         assert_eq!(actual, expected);

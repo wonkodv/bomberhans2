@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use bomberhans_lib::game_state::GameState;
 use bomberhans_lib::game_state::Player;
+use bomberhans_lib::utils::PlayerId;
 use eframe::egui;
 use egui::pos2;
 use egui::Color32;
@@ -15,7 +16,6 @@ use egui::TextureId;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::app;
 use crate::app::*;
 use crate::connection::ServerInfo;
 use bomberhans_lib::field::Cell;
@@ -45,10 +45,7 @@ fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
 }
 
 pub fn gui(mut game_controller: GameController) {
-    let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(600.0, 600.0)),
-        ..Default::default()
-    };
+    let options = eframe::NativeOptions { initial_window_size: Some(egui::vec2(600.0, 600.0)), ..Default::default() };
     eframe::run_native(
         &format!("Bomberhans {}", bomberhans_lib::VERSION),
         options,
@@ -62,7 +59,6 @@ pub fn gui(mut game_controller: GameController) {
                 app_settings: AppSettings::load(),
                 textures: None,
                 walking_directions: DirectionStack::new(),
-                state: app::State::Initial,
                 game_controller,
             })
         }),
@@ -75,11 +71,7 @@ struct TextureManager {
 
 impl TextureManager {
     fn get_texture(self: &Rc<Self>, texture: &str) -> TextureId {
-        self.textures
-            .get(texture)
-            .ok_or_else(|| format!("Expected {texture} to exist"))
-            .unwrap()
-            .into()
+        self.textures.get(texture).ok_or_else(|| format!("Expected {texture} to exist")).unwrap().into()
     }
 
     fn get_cell(self: &Rc<Self>, cell: &Cell) -> TextureId {
@@ -87,11 +79,7 @@ impl TextureManager {
     }
 
     fn get_player(self: &Rc<Self>, player: &PlayerState, time: TimeStamp) -> TextureId {
-        let odd = if time.ticks_from_start() / 15 % 2 == 0 {
-            "2"
-        } else {
-            ""
-        };
+        let odd = if time.ticks_from_start() / 15 % 2 == 0 { "2" } else { "" };
 
         let s = match player.action.walking {
             Some(Direction::North) => "walking_n",
@@ -111,9 +99,7 @@ struct DirectionStack {
 
 impl DirectionStack {
     pub fn new() -> DirectionStack {
-        Self {
-            elements: Vec::new(),
-        }
+        Self { elements: Vec::new() }
     }
     pub fn push(&mut self, dir: Direction) {
         if !self.elements.contains(&dir) {
@@ -122,12 +108,7 @@ impl DirectionStack {
     }
 
     pub fn remove(&mut self, dir: Direction) {
-        self.elements.remove(
-            self.elements
-                .iter()
-                .position(|x| x == &dir)
-                .expect("removing key that was added"),
-        );
+        self.elements.remove(self.elements.iter().position(|x| x == &dir).expect("removing key that was added"));
     }
 
     pub fn get(&self) -> Option<Direction> {
@@ -181,58 +162,51 @@ struct MyApp {
     textures: Option<Rc<TextureManager>>,
     game_controller: GameController,
     app_settings: AppSettings,
-    state: app::State,
 }
 
 impl MyApp {
     fn textures(&mut self, ctx: &egui::Context) -> Rc<TextureManager> {
-        Rc::clone(self.textures.get_or_insert_with(|| {
-            Rc::new(TextureManager {
-                textures: load_tiles(ctx),
-            })
-        }))
+        Rc::clone(self.textures.get_or_insert_with(|| Rc::new(TextureManager { textures: load_tiles(ctx) })))
     }
 
+    /// Settings UI
+    ///
+    /// Return None if settings stayed the same,
+    /// new Settings otherwise
     #[allow(clippy::too_many_lines)] // GUI code has to be long and ugly
-    fn update_settings(
-        &mut self,
-        ui: &mut egui::Ui,
-        settings: Settings,
-        read_only: bool,
-    ) -> Settings {
+    fn update_settings(&mut self, ui: &mut egui::Ui, settings: &Settings, read_only: bool) -> Option<Settings> {
         let textures = self.textures(ui.ctx());
 
-        let mut settings = settings;
+        let mut settings_mut = settings.clone();
 
         ui.style_mut().spacing.slider_width = 300.0;
 
-        ui.add(egui::TextEdit::singleline(&mut settings.game_name))
-            .on_hover_text("Name of the Game");
+        ui.add(egui::TextEdit::singleline(&mut settings_mut.game_name)).on_hover_text("Name of the Game");
 
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.heading("Game Options");
                 ui.add(
-                    egui::Slider::new(&mut settings.width, Settings::WIDTH_RANGE)
+                    egui::Slider::new(&mut settings_mut.width, Settings::WIDTH_RANGE)
                         .text("Width")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Width of the game field [cells]");
                 ui.add(
-                    egui::Slider::new(&mut settings.height, Settings::HEIGHT_RANGE)
+                    egui::Slider::new(&mut settings_mut.height, Settings::HEIGHT_RANGE)
                         .text("Height")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Height of the game field [cells]");
                 ui.add(
-                    egui::Slider::new(&mut settings.players, Settings::PLAYERS_RANGE)
+                    egui::Slider::new(&mut settings_mut.players, Settings::PLAYERS_RANGE)
                         .text("Players")
                         .clamp_to_range(true),
                 )
                 .on_hover_text("Number of players that can join this game");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.bomb_explode_time_ms,
+                        &mut settings_mut.bomb_explode_time_ms,
                         Settings::BOMB_TIME_RANGE,
                     )
                     .text("Bomb Time")
@@ -240,14 +214,14 @@ impl MyApp {
                 )
                 .on_hover_text("Time between placing a bomb and its explosion [ms]");
                 ui.add(
-                    egui::Slider::new(&mut settings.speed_base, Settings::SPEED_BASE_RANGE)
+                    egui::Slider::new(&mut settings_mut.speed_base, Settings::SPEED_BASE_RANGE)
                         .text("Base Speed")
                         .clamp_to_range(false),
                 )
                 .on_hover_text("Speed of the Player without any upgrades [Cells/s/100]");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.speed_multiplyer,
+                        &mut settings_mut.speed_multiplyer,
                         Settings::SPEED_MULTIPLYER_RANGE,
                     )
                     .text("Speed Increase")
@@ -256,7 +230,7 @@ impl MyApp {
                 .on_hover_text("Player speed increase per speed powerup [Cells/s/100]");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.bomb_walking_chance,
+                        &mut settings_mut.bomb_walking_chance,
                         Settings::BOMB_WALKING_CHANCE_RANGE,
                     )
                     .text("Bomb Walking")
@@ -265,7 +239,7 @@ impl MyApp {
                 .on_hover_text("Chance that a player can walk over a bomb in an update [%]");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.tombstone_walking_chance,
+                        &mut settings_mut.tombstone_walking_chance,
                         Settings::TOMBSTONE_WALKING_CHANCE_RANGE,
                     )
                     .text("Tombstone Walking")
@@ -274,7 +248,7 @@ impl MyApp {
                 .on_hover_text("Chance that a player can walk over a tombstone in an update [%]");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.upgrade_explosion_power,
+                        &mut settings_mut.upgrade_explosion_power,
                         Settings::UPGRADE_EXPLOSION_POWER_RANGE,
                     )
                     .text("Upgrade Explosion")
@@ -283,7 +257,7 @@ impl MyApp {
                 .on_hover_text("Explosion Range of ignited Powerups [cells]");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.wood_burn_time_ms,
+                        &mut settings_mut.wood_burn_time_ms,
                         Settings::WOOD_BURN_TIME_RANGE,
                     )
                     .text("Wood Burn Time")
@@ -292,7 +266,7 @@ impl MyApp {
                 .on_hover_text("Time that wood burns after igniting [ms]");
                 ui.add(
                     egui::Slider::new(
-                        &mut settings.fire_burn_time_ms,
+                        &mut settings_mut.fire_burn_time_ms,
                         Settings::FIRE_BURN_TIME_RANGE,
                     )
                     .text("Fire Burn Time")
@@ -300,7 +274,7 @@ impl MyApp {
                 )
                 .on_hover_text("Time that fire burns [ms]");
                 ui.add(
-                    egui::Slider::new(&mut settings.bomb_offset, Settings::BOMB_OFFSET_RANGE)
+                    egui::Slider::new(&mut settings_mut.bomb_offset, Settings::BOMB_OFFSET_RANGE)
                         .text("Bomb Placement Offset")
                         .clamp_to_range(false),
                 )
@@ -311,38 +285,38 @@ impl MyApp {
                 ui.heading("Ratios of cells that burned wood will turn into");
                 ui.horizontal(|ui| {
                     ui.add(
-                        egui::Slider::new(&mut settings.ratios.power, RATIO_RANGE).text("Power Upgrade"),
+                        egui::Slider::new(&mut settings_mut.ratios.power, RATIO_RANGE).text("Power Upgrade"),
                     );
                 })
                 .response
                 .on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
                 ui.horizontal(|ui| {
                     ui.add(
-                        egui::Slider::new(&mut settings.ratios.speed, RATIO_RANGE).text("Speed Upgrade"),
+                        egui::Slider::new(&mut settings_mut.ratios.speed, RATIO_RANGE).text("Speed Upgrade"),
                     );
                 })
                 .response
                 .on_hover_text("Consuming this will upgrade the player's walking speed");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut settings.ratios.bombs, RATIO_RANGE).text("Bomb Upgrade"));
+                    ui.add(egui::Slider::new(&mut settings_mut.ratios.bombs, RATIO_RANGE).text("Bomb Upgrade"));
                 })
                 .response
                 .on_hover_text(
                     "Consuming this will increase how many bombs the player can place simultaneously",
                 );
-                ui.horizontal(|ui| { ui.add(egui::Slider::new(&mut settings.ratios.teleport, RATIO_RANGE).text("Teleport")); }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
+                ui.horizontal(|ui| { ui.add(egui::Slider::new(&mut settings_mut.ratios.teleport, RATIO_RANGE).text("Teleport")); }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut settings.ratios.wall, RATIO_RANGE).text("Wall"));
+                    ui.add(egui::Slider::new(&mut settings_mut.ratios.wall, RATIO_RANGE).text("Wall"));
                 })
                 .response
                 .on_hover_text("Wall\nIf this happens too often, you will be stuck.");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut settings.ratios.wood, RATIO_RANGE).text("Wood"));
+                    ui.add(egui::Slider::new(&mut settings_mut.ratios.wood, RATIO_RANGE).text("Wood"));
                 })
                 .response
                 .on_hover_text("Wood\nYou can try and explode again");
                 ui.horizontal(|ui| {
-                    ui.add(egui::Slider::new(&mut settings.ratios.clear, RATIO_RANGE).text("Empty Cell"));
+                    ui.add(egui::Slider::new(&mut settings_mut.ratios.clear, RATIO_RANGE).text("Empty Cell"));
                 })
                 .response
                 .on_hover_text("Just a boring empty Cell");
@@ -350,7 +324,7 @@ impl MyApp {
             ui.vertical(|ui| {
                 ui.heading("effective Ratios");
                 let image_dims = egui::Vec2 { x: 16.0, y: 16.0 };
-                let percentages = settings.ratios.normalize();
+                let percentages = settings_mut.ratios.normalize();
                 ui.horizontal(|ui| {
                     ui.image(textures.get_texture("cell_upgrade_power"), image_dims);
                     ui.label(format!("{}%", percentages.power));
@@ -392,7 +366,11 @@ impl MyApp {
                 .on_hover_text("Just a boring empty Cell");
             });
         });
-        settings
+        if settings == &settings_mut {
+            None
+        } else {
+            Some(settings_mut)
+        }
     }
 
     fn update_game(&mut self, ui: &mut egui::Ui, game_state: &GameState) {
@@ -423,32 +401,17 @@ impl MyApp {
     fn update_game_draw(&mut self, ui: &mut egui::Ui, game_state: &GameState) {
         let textures = self.textures(ui.ctx());
 
-        ui.horizontal(|ui| {
-            ui.label(&game_state.settings.game_name);
-        });
-
-        let step = &mut self.state;
-
         let width = (game_state.settings.width + 2) as f32 * PIXEL_PER_CELL;
         let height = (game_state.settings.height + 2) as f32 * PIXEL_PER_CELL;
 
-        let game_field = ui.image(
-            textures.get_texture("background"),
-            egui::Vec2 {
-                x: width,
-                y: height,
-            },
-        );
+        let game_field = ui.image(textures.get_texture("background"), egui::Vec2 { x: width, y: height });
 
         let painter = ui.painter_at(game_field.rect);
 
         painter.rect_stroke(
             game_field.rect,
             egui::Rounding::none(),
-            egui::Stroke {
-                width: 2.0,
-                color: egui::Color32::GOLD,
-            },
+            egui::Stroke { width: 2.0, color: egui::Color32::GOLD },
         );
 
         painter.extend(game_state.field.iter_with_border().map(|(pos, cell)| {
@@ -473,19 +436,13 @@ impl MyApp {
     }
 
     fn update_initial(&mut self, ui: &mut egui::Ui) {
-        ui.add(egui::TextEdit::singleline(
-            &mut self.app_settings.player_name,
-        ))
-        .on_hover_text("Player Name");
+        ui.add(egui::TextEdit::singleline(&mut self.app_settings.player_name)).on_hover_text("Player Name");
         ui.horizontal(|ui| {
-            let local_button = ui
-                .button("Single Player")
-                .on_hover_text("Start a local Game without network players");
+            let local_button = ui.button("Single Player").on_hover_text("Start a local Game without network players");
 
             if local_button.clicked() {
-                self.app_settings.save(); // TODO: should only save game-settings?
-                self.game_controller
-                    .start_local_game(self.app_settings.game_settings.clone());
+                // self.app_settings.save(); // TODO: should only save game-settings?
+                self.game_controller.start_local_game();
             }
         });
         ui.horizontal(|ui| {
@@ -495,7 +452,7 @@ impl MyApp {
             {
                 let mut memory = ui.memory();
                 if memory.focus().is_none() {
-                    memory.request_focus(connect_button.id); // TODO: this flickers
+                    memory.request_focus(connect_button.id);
                 }
             }
 
@@ -524,33 +481,64 @@ impl MyApp {
 
     fn update_multiplayer_view(&mut self, ui: &mut egui::Ui, server_info: &ServerInfo) {
         ui.heading(&format!(
-            "Multiplayer Games on {} Ping {:.1}",
+            "Multiplayer Games on {}, Ping {:.1}",
             server_info.server_name,
             server_info.ping.as_secs_f32() / 1000.0
         ));
+        let button = ui.button("Host new Game");
+        {
+            let mut memory = ui.memory();
+            if memory.focus().is_none() {
+                memory.request_focus(button.id);
+            }
+        }
+        if button.clicked() {
+            self.game_controller.open_new_lobby();
+        }
+
         for (game_id, game_name) in &server_info.lobbies {
             ui.horizontal(|ui| {
                 if ui.button("Join").clicked() {
-                    todo!("join {game_id:?}");
+                    self.game_controller.join_lobby(*game_id);
                 }
                 ui.label(game_name);
             });
         }
-        if ui.button("Host new Game").clicked() {
-            self.game_controller.open_new_lobby();
-        }
     }
 
     fn update_multiplayer_guest(
-        &self,
+        &mut self,
         ui: &mut egui::Ui,
         settings: Settings,
         players: Vec<Player>,
+        local_player_id: PlayerId,
     ) {
+        todo!()
     }
 
-    fn update_multiplayer_host(&self, ui: &mut egui::Ui, players: Vec<Player>) {
-        todo!()
+    fn update_multiplayer_host(
+        &mut self,
+        ui: &mut egui::Ui,
+        settings: Settings,
+        players: Vec<Player>,
+        local_player_id: PlayerId,
+    ) {
+        ui.heading(&format!("Multiplayer Game {}", settings.game_name));
+
+        if let Some(new_settings) = self.update_settings(ui, &settings, false) {
+            self.game_controller.update_settings(new_settings);
+        }
+
+        let button = ui.button("Start");
+        {
+            let mut memory = ui.memory();
+            if memory.focus().is_none() {
+                memory.request_focus(button.id);
+            }
+        }
+        if button.clicked() {
+            self.game_controller.start_multiplayer_game();
+        }
     }
 }
 
@@ -563,25 +551,25 @@ impl eframe::App for MyApp {
             match state {
                 State::Initial => self.update_initial(ui),
                 State::SpSettings => {
-                    self.app_settings.game_settings =
-                        self.update_settings(ui, self.app_settings.game_settings.clone(), false);
+                    //      self.app_settings.game_settings =
+                    //          self.update_settings(ui, self.app_settings.game_settings.clone(), false);
                     ui.horizontal(|ui| {
-                        if ui.button("Restore Default Settings").clicked() {
-                            self.app_settings.game_settings = Settings::default();
-                        }
+                        //          if ui.button("Restore Default Settings").clicked() {
+                        //              self.app_settings.game_settings = Settings::default();
+                        //          }
 
                         let start_button = ui.button("Start").on_hover_text("Start local game");
                         {
                             let mut memory = ui.memory();
                             if memory.focus().is_none() {
-                                memory.request_focus(start_button.id); // TODO: this flickers
+                                memory.request_focus(start_button.id);
                             }
                         }
 
                         if start_button.clicked() {
-                            self.app_settings.save();
-                            self.game_controller
-                                .start_local_game(self.app_settings.game_settings.clone());
+                            //              self.app_settings.save();
+                            //              self.app_settings.game_settings.clone()
+                            self.game_controller.start_local_game();
                         }
 
                         if ui.button("Don't click").clicked() {
@@ -589,26 +577,54 @@ impl eframe::App for MyApp {
                         }
                     });
                 }
-                State::SpGame(game) => self.update_game(ui, &game.game_state()),
+                State::SpGame(game) => {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Local Game: {}", &game.game_state().settings.game_name));
+                    });
+                    self.update_game(ui, &game.game_state());
+                }
                 State::MpConnecting => {
                     ui.label(&format!("connecting to server",));
                     if ui.button("Cancel ").clicked() {
-                        self.state = State::Initial;
+                        self.game_controller.disconnect();
                     }
                 }
                 State::MpView(server_info) => self.update_multiplayer_view(ui, &server_info),
-                State::MpOpeningLobby => {
+                State::MpOpeningNewLobby => {
                     ui.label(&format!("Waiting for new Lobby to open",));
                     if ui.button("Cancel ").clicked() {
-                        self.state = State::Initial;
+                        self.game_controller.disconnect();
                     }
                 }
-                State::MpLobbyGuest(settings, players) => {
-                    self.update_multiplayer_guest(ui, settings, players)
+
+                State::MpGame { server_game_state, local_game_state, local_update } => {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Multiplayer Game: {}", local_game_state.settings.game_name));
+                    });
+                    self.update_game(ui, &local_game_state);
                 }
-                State::MpLobbyHost(_settings, players) => self.update_multiplayer_host(ui, players),
-                State::MpGame(game) => todo!(),
+                State::MpServerLost(game) => {
+                    ui.label(&format!("Server not responding",));
+                    if ui.button("Cancel ").clicked() {
+                        self.game_controller.disconnect();
+                    }
+                }
+                State::Disconnected => {
+                    ui.label(&format!("Server disconnected",));
+                    if ui.button("Ack ").clicked() {
+                        self.game_controller.disconnect();
+                    }
+                }
+                State::GuiClosed => {
+                    panic!("Controller assumes Gui closed, but we are trying to draw that")
+                }
                 State::Invalid => panic!(),
+                State::MpLobbyGuest { settings, players, local_player_id } => {
+                    self.update_multiplayer_guest(ui, settings, players, local_player_id)
+                }
+                State::MpLobbyHost { settings, players, local_player_id } => {
+                    self.update_multiplayer_host(ui, settings, players, local_player_id)
+                }
             }
         });
         if !frame.is_web() {
@@ -646,10 +662,7 @@ fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
                 $x,
                 ctx.load_texture(
                     $x,
-                    load_image_from_memory(
-                        include_bytes!(concat!("../../images/", $x, ".bmp")),
-                        $t,
-                    ),
+                    load_image_from_memory(include_bytes!(concat!("../../images/", $x, ".bmp")), $t),
                     egui::TextureOptions::default(),
                 ),
             )

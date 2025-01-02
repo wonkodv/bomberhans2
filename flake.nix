@@ -28,6 +28,7 @@
             gdb
             gnumake
             just
+            inotify-tools # to detect changes in the exe and restart the server
             llvmPackages_latest.bintools
             pkg-config
             pre-commit

@@ -31,10 +31,10 @@ tokio = { version = "1.42.0", features = ["full"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unused_must_use    = "forbid"
 dead_code          = "allow" # TODO
 unused_variables   = "allow" # TODO
 unreachable_code   = "allow" # TODO
-
 
 [workspace.lints.clippy]
 unusual_byte_groupings = "allow"

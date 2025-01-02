@@ -39,6 +39,9 @@ pub struct TimeStamp {
 }
 
 impl TimeStamp {
+    pub fn new() -> Self {
+        Self { inner: 0 }
+    }
     pub fn ticks_from_start(self) -> u32 {
         self.inner
     }
@@ -54,9 +57,7 @@ impl std::ops::Add<Duration> for TimeStamp {
     type Output = Self;
 
     fn add(self, rhs: Duration) -> Self::Output {
-        Self {
-            inner: self.inner + rhs.ticks,
-        }
+        Self { inner: self.inner + rhs.ticks }
     }
 }
 
@@ -72,11 +73,7 @@ impl Duration {
     }
 
     pub fn from_ms(milliseconds: u32) -> Self {
-        let ticks = if milliseconds == 0 {
-            0
-        } else {
-            u32::max(1, (milliseconds * TICKS_PER_SECOND + 499) / 1000)
-        };
+        let ticks = if milliseconds == 0 { 0 } else { u32::max(1, (milliseconds * TICKS_PER_SECOND + 499) / 1000) };
         Self { ticks }
     }
     pub fn ticks(self) -> u32 {
@@ -202,17 +199,11 @@ impl Position {
     }
 
     pub fn as_cell_pos(self) -> CellPosition {
-        CellPosition {
-            x: self.x / Self::ACCURACY,
-            y: self.y / Self::ACCURACY,
-        }
+        CellPosition { x: self.x / Self::ACCURACY, y: self.y / Self::ACCURACY }
     }
 
     pub fn from_cell_position(p: CellPosition) -> Self {
-        Self {
-            x: p.x * Self::ACCURACY + Self::ACCURACY / 2,
-            y: p.y * Self::ACCURACY + Self::ACCURACY / 2,
-        }
+        Self { x: p.x * Self::ACCURACY + Self::ACCURACY / 2, y: p.y * Self::ACCURACY + Self::ACCURACY / 2 }
     }
 
     pub fn distance_to_border(self, direction: Direction) -> i32 {
@@ -272,17 +263,11 @@ mod test {
 
     #[test]
     fn test_cell_to_pos() {
-        assert_eq!(
-            Position::from_cell_position(CellPosition::new(5, 9)),
-            Position::new(550, 950)
-        );
+        assert_eq!(Position::from_cell_position(CellPosition::new(5, 9)), Position::new(550, 950));
     }
 
     #[test]
     fn test_pos_to_cell() {
-        assert_eq!(
-            Position::new(500, 999).as_cell_pos(),
-            CellPosition::new(5, 9)
-        );
+        assert_eq!(Position::new(500, 999).as_cell_pos(), CellPosition::new(5, 9));
     }
 }

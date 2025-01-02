@@ -47,11 +47,7 @@ impl SinglePlayerGame {
 
         let game_state = GameState::new(settings, players);
 
-        SinglePlayerGame {
-            game_state,
-            local_player,
-            last_update: time::Instant::now(),
-        }
+        SinglePlayerGame { game_state, local_player, last_update: time::Instant::now() }
     }
 
     /// proceed game time according to real time since last update

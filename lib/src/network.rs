@@ -58,6 +58,13 @@ pub struct ServerLobbyUpdate {
     pub client_player_id: PlayerId,
 }
 
+/// Client updates the settings of the hosted lobby
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientLobbySettingsUpdate {
+    pub client_id: ClientId,
+    pub settings: Settings,
+}
+
 /// Periodic Client to Server update
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientUpdate {
@@ -99,7 +106,10 @@ pub struct Update {
 pub enum ClientMessage {
     Hello(ClientHello),
     OpenNewLobby(ClientId),
-    Update(ClientUpdate),
+    JoinLobby(ClientId, GameId),
+    LobbySettingsUpdate(ClientLobbySettingsUpdate),
+    GameStart(ClientId),
+    GameUpdate(ClientUpdate),
     Bye(ClientId),
 }
 
