@@ -8,3 +8,6 @@ server: build
 
 client: build
     cargo run --bin bomberhans2
+
+both: build
+    target/debug/bomberhans2-server & pid=$!; target/debug/bomberhans2; kill $pid

@@ -388,14 +388,14 @@ impl GameState {
             // TODO: Tombstone gives upgrade that player had most of?
             Cell::Fire { .. } | Cell::Empty | Cell::TombStone(..) => (true, 0, owner),
             Cell::Bomb { power, owner: bomb_owner, .. } => {
-                log::info!("{cell:?}: destroying {owner:?}'s bomb");
+                log::info!("{:?} {:?}: destroying {:?}'s bomb", self.time, cell, owner);
                 self.players.get_mut(&bomb_owner).unwrap().1.current_bombs_placed -= 1;
 
                 // GAME_RULE: owner of secondary Bomb takes the credit
                 (true, power, bomb_owner)
             }
             Cell::Upgrade(upgrade) => {
-                log::info!("{cell:?}: destroying {upgrade:?}");
+                log::info!("{:?} {:?}: destroying {:?}", self.time, cell, upgrade);
 
                 (true, self.settings.upgrade_explosion_power, owner)
             }
@@ -415,11 +415,11 @@ impl GameState {
                         )
                         .collect();
                     if ports.is_empty() {
-                        log::info!("{cell:?}: destroying Teleport (no remote TP found)");
+                        log::info!("{:?} {:?}: destroying Teleport (no remote TP found)", self.time, cell);
                         false
                     } else {
                         let other = ports[random(self.time, cell.x, cell.y).idx() % ports.len()];
-                        log::info!("{cell:?}: destroying Teleport, tunneling to {other:?}");
+                        log::info!("{:?} {:?}: destroying Teleport tunneling to {:?}", self.time, cell, other);
                         self.set_on_fire(other, owner, false);
                         true
                     }
@@ -432,7 +432,7 @@ impl GameState {
             Cell::Wood => {
                 let expire = self.time + self.settings.wood_burn_time();
                 self.field[cell] = Cell::WoodBurning { expire };
-                log::info!("{cell:?}: setting wall on fire until {expire:?}");
+                log::info!("{:?} {:?}: setting wood on fire until {:?}", self.time, cell, expire);
                 (false, 0, owner)
             }
         };

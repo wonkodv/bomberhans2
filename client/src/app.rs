@@ -256,12 +256,21 @@ impl GameControllerBackend {
                 let local_update = Update { player: local_player_id, action: Action::idle(), time: TimeStamp::new() };
                 let (server_game_state, local_game_state) =
                     synchronize_simulation(server_game_state, update, &local_update);
+                log::info!("First Server Update received, local state updated");
 
                 State::MpGame { server_game_state, local_game_state, local_update }
             }
-            (connection::Event::Update(update), State::MpGame { server_game_state, local_update, .. }) => {
+            (
+                connection::Event::Update(update),
+                State::MpGame { server_game_state, local_update, local_game_state: old_local_game_state },
+            ) => {
                 let (server_game_state, local_game_state) =
                     synchronize_simulation(server_game_state, update, &local_update);
+                log::info!(
+                    "Server Update received. proposed local state changed: {:?} -> {:?}",
+                    old_local_game_state.players[&local_update.player].1,
+                    local_game_state.players[&local_update.player].1
+                );
                 State::MpGame { server_game_state, local_game_state, local_update }
             }
             (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpLobbyHost { .. }) => {

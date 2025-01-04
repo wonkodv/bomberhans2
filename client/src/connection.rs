@@ -523,7 +523,7 @@ impl CommunicationBackend {
             State::Joining { client_id } => Some(in_ms(100)),
             State::Lobby { client_id } => Some(in_ms(100)),
             State::GameStarting { client_id } => Some(in_ms(100)),
-            State::Game { client_id, last_server_update } => Some(in_ms(100)),
+            State::Game { client_id, last_server_update } => Some(in_ms(5000)),
             State::Failed(_) => None,
             State::Disconnected => None,
             State::Invalid => None,

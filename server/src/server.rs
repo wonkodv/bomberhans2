@@ -130,10 +130,10 @@ impl Server {
                             log::warn!("ignoring out of order packet {packet:?}");
                             return None;
                         }
-
-                        client.last_received_packet_number = packet.packet_number;
-                        client.last_package_received = Instant::now();
                     }
+
+                    client.last_received_packet_number = packet.packet_number;
+                    client.last_package_received = Instant::now();
                 } else {
                     log::warn!("discarding packet from {client_address} for unknown client {client_id:?}: {packet:#?}");
                     return None;
@@ -151,23 +151,20 @@ impl Server {
                 client_address.hash(&mut h);
                 msg.player_name.hash(&mut h);
                 let cookie = h.finish();
-                let cookie = ClientId::new(cookie);
+                let client_id = ClientId::new(cookie);
 
-                match self.clients.entry(cookie) {
-                    std::collections::hash_map::Entry::Occupied(entry) => {
-                        log::debug!("Known client pinged again, {:?}", entry.get());
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        let client = Client {
-                            name: msg.player_name,
-                            id: cookie,
-                            address: client_address,
-                            game: None,
-                            last_received_packet_number: 0,
-                            last_package_received: Instant::now(),
-                        };
+                let new_client = Client {
+                    name: msg.player_name,
+                    id: client_id,
+                    address: client_address,
+                    game: None,
+                    last_received_packet_number: 0,
+                    last_package_received: Instant::now(),
+                };
 
-                        entry.insert(client);
+                if let Some(old_client) = self.clients.insert(client_id, new_client) {
+                    if let Some(game) = &old_client.game {
+                        self.games.get_mut(&game.game_id).unwrap().remove_player(game.player_id);
                     }
                 }
 
@@ -182,12 +179,7 @@ impl Server {
                     })
                     .collect();
 
-                Some(ServerMessage::Hello(ServerHello {
-                    server_name,
-                    client_id: cookie,
-                    lobbies,
-                    clients_packet_number,
-                }))
+                Some(ServerMessage::Hello(ServerHello { server_name, client_id, lobbies, clients_packet_number }))
             }
 
             ClientMessage::OpenNewLobby(client_id) => {
@@ -246,7 +238,7 @@ impl Server {
                     return None;
                 };
 
-                if msg.last_server_update <= client_game.last_acknowledge_time {
+                if msg.last_server_update < client_game.last_acknowledge_time {
                     log::debug!("ignoring out of order/duplicate message {msg:?}");
                     return None;
                 }
