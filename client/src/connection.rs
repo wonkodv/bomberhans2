@@ -4,7 +4,10 @@ use std::net::SocketAddr;
 
 use bomberhans_lib::game_state::Action;
 use bomberhans_lib::game_state::Player;
-use bomberhans_lib::network::*;
+use bomberhans_lib::network::{
+    decode, encode, ClientHello, ClientId, ClientLobbySettingsUpdate, ClientMessage, ClientPacket, ClientUpdate,
+    GameId, ServerMessage, ServerPacket, ServerUpdate, BOMBERHANS_MAGIC_NO_V1,
+};
 use bomberhans_lib::settings::Settings;
 use bomberhans_lib::utils::PlayerId;
 use bomberhans_lib::utils::TimeStamp;
@@ -35,7 +38,7 @@ pub fn connect(server: SocketAddr, player_name: String) -> Connection {
         });
     }
 
-    Connection { commands_to_backend, server, events_from_backend }
+    Connection { commands_to_backend, events_from_backend, server }
 }
 
 #[derive(Debug, Clone)]
@@ -98,19 +101,19 @@ impl Connection {
     }
 
     pub async fn disconnect(&self) {
-        self.commands_to_backend.send(Command::Disconnect).await.unwrap()
+        self.commands_to_backend.send(Command::Disconnect).await.unwrap();
     }
 
     pub async fn update_settings(&self, settings: Settings) {
-        self.commands_to_backend.send(Command::UpdateSettings(settings)).await.unwrap()
+        self.commands_to_backend.send(Command::UpdateSettings(settings)).await.unwrap();
     }
 
     pub async fn start(&self) {
-        self.commands_to_backend.send(Command::Start).await.unwrap()
+        self.commands_to_backend.send(Command::Start).await.unwrap();
     }
 
     pub async fn set_action(&self, time: TimeStamp, action: Action) {
-        self.commands_to_backend.send(Command::SetAction(time, action)).await.unwrap()
+        self.commands_to_backend.send(Command::SetAction(time, action)).await.unwrap();
     }
 }
 
@@ -276,7 +279,7 @@ impl CommunicationBackend {
             };
 
             tokio::select! {
-                _ = async { if let Some(to) = self.timeout { sleep(to - Instant::now()).await } } => { self.handle_timeout().await }
+                () = async { if let Some(to) = self.timeout { sleep(to - Instant::now()).await } } => { self.handle_timeout().await }
                 cmd = self.commands_from_frontend.recv() => {
                     match cmd {
                         Some(cmd) => self.handle_command(cmd) .await,

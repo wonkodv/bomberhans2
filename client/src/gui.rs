@@ -16,7 +16,7 @@ use egui::TextureId;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::app::*;
+use crate::app::{GameController, State};
 use crate::connection::ServerInfo;
 use bomberhans_lib::field::Cell;
 use bomberhans_lib::game_state::Action;
@@ -460,11 +460,11 @@ impl MyApp {
             let server = self.app_settings.server.parse::<SocketAddr>();
             match server {
                 Err(err) => {
-                    server_text_edit.on_hover_text(&format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Problem: {err:#?}"));
+                    server_text_edit.on_hover_text(format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Problem: {err:#?}"));
                     // TODO: make the textedit red
                 }
                 Ok(server) => {
-                server_text_edit.on_hover_text(&format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Value: {server:#?}"));
+                server_text_edit.on_hover_text(format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Value: {server:#?}"));
                 if connect_button.clicked() {
                     self.app_settings.save(); // TODO: should only save server
 
@@ -480,7 +480,7 @@ impl MyApp {
     }
 
     fn update_multiplayer_view(&mut self, ui: &mut egui::Ui, server_info: &ServerInfo) {
-        ui.heading(&format!(
+        ui.heading(format!(
             "Multiplayer Games on {}, Ping {:.1}",
             server_info.server_name,
             server_info.ping.as_secs_f32() / 1000.0
@@ -523,7 +523,7 @@ impl MyApp {
         players: Vec<Player>,
         local_player_id: PlayerId,
     ) {
-        ui.heading(&format!("Multiplayer Game {}", settings.game_name));
+        ui.heading(format!("Multiplayer Game {}", settings.game_name));
 
         if let Some(new_settings) = self.update_settings(ui, &settings, false) {
             self.game_controller.update_settings(new_settings);
@@ -572,26 +572,24 @@ impl eframe::App for MyApp {
                             self.game_controller.start_local_game();
                         }
 
-                        if ui.button("Don't click").clicked() {
-                            panic!("Don't click!");
-                        }
+                        assert!(!ui.button("Don't click").clicked(), "Don't click!");
                     });
                 }
                 State::SpGame(game) => {
                     ui.horizontal(|ui| {
                         ui.label(format!("Local Game: {}", &game.game_state().settings.game_name));
                     });
-                    self.update_game(ui, &game.game_state());
+                    self.update_game(ui, game.game_state());
                 }
                 State::MpConnecting => {
-                    ui.label(&format!("connecting to server",));
+                    ui.label("connecting to server".to_owned());
                     if ui.button("Cancel ").clicked() {
                         self.game_controller.disconnect();
                     }
                 }
                 State::MpView(server_info) => self.update_multiplayer_view(ui, &server_info),
                 State::MpOpeningNewLobby => {
-                    ui.label(&format!("Waiting for new Lobby to open",));
+                    ui.label("Waiting for new Lobby to open".to_owned());
                     if ui.button("Cancel ").clicked() {
                         self.game_controller.disconnect();
                     }
@@ -604,13 +602,13 @@ impl eframe::App for MyApp {
                     self.update_game(ui, &local_game_state);
                 }
                 State::MpServerLost(game) => {
-                    ui.label(&format!("Server not responding",));
+                    ui.label("Server not responding".to_owned());
                     if ui.button("Cancel ").clicked() {
                         self.game_controller.disconnect();
                     }
                 }
                 State::Disconnected => {
-                    ui.label(&format!("Server disconnected",));
+                    ui.label("Server disconnected".to_owned());
                     if ui.button("Ack ").clicked() {
                         self.game_controller.disconnect();
                     }
@@ -620,10 +618,10 @@ impl eframe::App for MyApp {
                 }
                 State::Invalid => panic!(),
                 State::MpLobbyGuest { settings, players, local_player_id } => {
-                    self.update_multiplayer_guest(ui, settings, players, local_player_id)
+                    self.update_multiplayer_guest(ui, settings, players, local_player_id);
                 }
                 State::MpLobbyHost { settings, players, local_player_id } => {
-                    self.update_multiplayer_host(ui, settings, players, local_player_id)
+                    self.update_multiplayer_host(ui, settings, players, local_player_id);
                 }
             }
         });

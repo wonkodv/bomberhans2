@@ -7,8 +7,11 @@ use std::time::Duration;
 use std::time::Instant;
 
 use bomberhans_lib::field::Field;
-use bomberhans_lib::game_state::*;
-use bomberhans_lib::network::*;
+use bomberhans_lib::game_state::{GameState, Player};
+use bomberhans_lib::network::{
+    ClientId, ClientLobbySettingsUpdate, ClientMessage, ClientPacket, ClientUpdate, GameId, ServerHello,
+    ServerLobbyUpdate, ServerMessage, ServerPacket, ServerUpdate, Update, BOMBERHANS_MAGIC_NO_V1,
+};
 use bomberhans_lib::settings::Settings;
 use bomberhans_lib::utils::PlayerId;
 use bomberhans_lib::utils::Position;
@@ -116,7 +119,7 @@ impl Server {
             | ClientMessage::JoinLobby(client_id, _)
             | ClientMessage::GameStart(client_id)
             | ClientMessage::Bye(client_id) => {
-                if let Some(client) = self.clients.get_mut(&client_id) {
+                if let Some(client) = self.clients.get_mut(client_id) {
                     if client.address != client_address {
                         log::warn!(
                             "discarding message from {} for {:#?} whose hello-address was {}",
@@ -179,7 +182,7 @@ impl Server {
                     })
                     .collect();
 
-                Some(ServerMessage::Hello(ServerHello { server_name, client_id, lobbies, clients_packet_number }))
+                Some(ServerMessage::Hello(ServerHello { clients_packet_number, client_id, server_name, lobbies }))
             }
 
             ClientMessage::OpenNewLobby(client_id) => {
@@ -348,10 +351,8 @@ impl Server {
             for u in updates {
                 if u.time > game.game_state.time {
                     game.future_updates.push(u);
-                } else {
-                    if game.game_state.set_player_action(u.player, u.action) {
-                        game.updates.push(Update { time: game.game_state.time, ..u });
-                    }
+                } else if game.game_state.set_player_action(u.player, u.action) {
+                    game.updates.push(Update { time: game.game_state.time, ..u });
                 }
             }
 

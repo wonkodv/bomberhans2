@@ -146,5 +146,5 @@ where
 }
 
 pub fn decode<T: for<'a> Deserialize<'a>>(data: &[u8]) -> Option<T> {
-    postcard::from_bytes::<T>(&data).ok()
+    postcard::from_bytes::<T>(data).ok()
 }

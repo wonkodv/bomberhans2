@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::thread::sleep;
 
-use bomberhans_lib::network::*;
+use bomberhans_lib::network::{decode, encode, ClientPacket};
 
 mod server;
 
@@ -38,7 +38,7 @@ fn serve() -> Result<(), Box<dyn Error>> {
                     return Err(e.into());
                 }
             }
-            sleep(std::time::Duration::from_millis(1))
+            sleep(std::time::Duration::from_millis(1));
         }
         let updates = server.periodic_update();
         for (adr, msg) in updates {

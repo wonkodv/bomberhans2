@@ -20,7 +20,7 @@ use crate::connection::Connection;
 use crate::connection::ServerInfo;
 use crate::game::SinglePlayerGame;
 
-/// Update Local Copy of Servers GameState and predict local GameState
+/// Update Local Copy of Servers `GameState` and predict local `GameState`
 fn synchronize_simulation(
     mut server_game_state: GameState,
     update: ServerUpdate,
@@ -98,11 +98,11 @@ pub fn controller() -> (GameController, GameControllerBackend) {
     let backend = GameControllerBackend::new(rx);
 
     let frontend = GameController { tx };
-    return (frontend, backend);
+    (frontend, backend)
 }
 
 pub enum Command {
-    SetUpdateCallback(Box<dyn Fn() -> () + Send>),
+    SetUpdateCallback(Box<dyn Fn() + Send>),
     SetAction(Action),
     ConfigureLocalGame,
     StartLocalGame,
@@ -144,7 +144,7 @@ pub struct GameController {
 }
 
 impl GameController {
-    pub fn set_update_callback(&mut self, callback: Box<dyn Fn() -> () + Send>) {
+    pub fn set_update_callback(&mut self, callback: Box<dyn Fn() + Send>) {
         self.tx.blocking_send(Command::SetUpdateCallback(callback)).map_err(|e| format!("{e:#?}")).unwrap();
     }
     pub fn set_action(&mut self, action: Action) {
@@ -198,11 +198,11 @@ pub struct GameControllerBackend {
     /// current connection with a server
     /// TODO: the connection should live in the Mp States, but i don't want to give it to the gui,
     /// but i also dont want to duplicate State (one with, one without conn).
-    /// Should be Some() in all State::Mp* states, None otherwise
+    /// Should be `Some()` in all `State::Mp*` states, None otherwise
     connection: Option<Connection>,
 
     /// callback to inform gui something new has happend
-    update_callback: Box<dyn Fn() -> () + Send>,
+    update_callback: Box<dyn Fn() + Send>,
 
     rx_from_frontend: Receiver<Command>,
 }
@@ -216,7 +216,7 @@ impl GameControllerBackend {
         loop {
             tokio::select! {
                 // TODO: do something smart with timeout
-                _ = sleep(Duration::from_millis(10)) => { self.handle_timeout().await }
+                () = sleep(Duration::from_millis(10)) => { self.handle_timeout().await }
                 gui_command = self.rx_from_frontend.recv() => {
                     match gui_command {
                         Some(gui_command) => self.handle_gui_command(gui_command).await,
@@ -266,11 +266,15 @@ impl GameControllerBackend {
             ) => {
                 let (server_game_state, local_game_state) =
                     synchronize_simulation(server_game_state, update, &local_update);
-                log::info!(
-                    "Server Update received. proposed local state changed: {:?} -> {:?}",
-                    old_local_game_state.players[&local_update.player].1,
-                    local_game_state.players[&local_update.player].1
-                );
+                if old_local_game_state.players[&local_update.player].1
+                    != local_game_state.players[&local_update.player].1
+                {
+                    log::info!(
+                        "Server Update received. proposed local player state changed:\n   {:?}\n   {:?}",
+                        old_local_game_state.players[&local_update.player].1,
+                        local_game_state.players[&local_update.player].1
+                    );
+                }
                 State::MpGame { server_game_state, local_game_state, local_update }
             }
             (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpLobbyHost { .. }) => {

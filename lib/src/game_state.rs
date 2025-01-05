@@ -157,7 +157,7 @@ impl GameState {
 
     pub fn simulate_1_update(&mut self) {
         // collect IDs to appease borrow checker :/
-        let player_ids = self.players.keys().map(|&id| id).collect::<Vec<_>>();
+        let player_ids = self.players.keys().copied().collect::<Vec<_>>();
         player_ids.into_iter().for_each(|player_id|
             // GAME_RULE: players with lower ID are processed earlier and win,
             // if both place bombs at the same spot 😎
@@ -177,7 +177,7 @@ impl GameState {
             log::trace!("{:?} {:?}.action := {:?}", self.time, player_id, action);
             player_state.action = action;
         }
-        return new;
+        new
     }
 }
 
@@ -439,7 +439,7 @@ impl GameState {
         if explodes {
             self.field[cell] = Cell::Fire { owner, expire: self.time + self.settings.fire_burn_time() };
             // check which players were on the cell
-            for (player_id, (player, player_state)) in self.players.iter_mut() {
+            for (player_id, (player, player_state)) in &mut self.players {
                 if player_state.position.as_cell_pos() == cell {
                     player_state.die(owner, player.start_position);
                     self.field[cell] = Cell::TombStone(*player_id);
