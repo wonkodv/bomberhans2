@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "bomberhans-lib"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "log",
  "postcard",
@@ -232,7 +232,7 @@ dependencies = [
 
 [[package]]
 name = "bomberhans2"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "bomberhans-lib",
  "confy",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "bomberhans2-server"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "bomberhans-lib",
  "env_logger",
