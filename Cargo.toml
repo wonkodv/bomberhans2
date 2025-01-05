@@ -50,6 +50,9 @@ cast_possible_truncation = "allow"   # working with numbers is hard :/
 cast_precision_loss = "allow"        # working with numbers is hard :/
 cast_sign_loss = "allow"             # working with numbers is hard :/
 module_name_repetitions = "allow"
+unnested_or_patterns = "allow"
+single_match_else = "allow"
+
 
 # restrict group
 clone_on_ref_ptr = "warn"
@@ -58,7 +61,6 @@ get_unwrap = "warn"
 #pattern_type_mismatch = "warn"
 redundant_type_annotations = "warn"
 same_name_method = "warn"
-self_named_module_files = "warn"
 str_to_string= "warn"
 string_to_string = "warn"
 try_err = "warn"

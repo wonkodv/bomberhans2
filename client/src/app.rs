@@ -243,12 +243,15 @@ impl GameControllerBackend {
         self.state = match (event, previous_state) {
             (_, State::Invalid) => panic!("Invalid State"),
             (_, State::Disconnected) | (connection::Event::Disconnected, _) => State::Disconnected,
-            //
+
             (connection::Event::GameListUpdated(server_info), State::MpConnecting)
             | (connection::Event::GameListUpdated(server_info), State::MpView(_)) => State::MpView(server_info),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpOpeningNewLobby) => {
+
+            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpOpeningNewLobby)
+            | (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpLobbyHost { .. }) => {
                 State::MpLobbyHost { settings, players, local_player_id }
             }
+
             (connection::Event::Update(update), State::MpLobbyGuest { settings, players, local_player_id })
             | (connection::Event::Update(update), State::MpLobbyHost { settings, players, local_player_id }) => {
                 let server_game_state = GameState::new(settings, players);
@@ -260,6 +263,7 @@ impl GameControllerBackend {
 
                 State::MpGame { server_game_state, local_game_state, local_update }
             }
+
             (
                 connection::Event::Update(update),
                 State::MpGame { server_game_state, local_update, local_game_state: old_local_game_state },
@@ -277,10 +281,6 @@ impl GameControllerBackend {
                 }
                 State::MpGame { server_game_state, local_game_state, local_update }
             }
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpLobbyHost { .. }) => {
-                State::MpLobbyHost { settings, players, local_player_id }
-            }
-
             //
             (connection::Event::GameListUpdated(_), State::Initial) => todo!(),
             (connection::Event::GameListUpdated(_), State::SpSettings) => todo!(),
@@ -316,7 +316,7 @@ impl GameControllerBackend {
             (connection::Event::Update(_), State::GuiClosed) => todo!(),
         };
 
-        self.update_gui().await;
+        self.update_gui();
     }
 
     async fn handle_gui_command(&mut self, command: Command) {
@@ -480,7 +480,7 @@ impl GameControllerBackend {
             State::Invalid => panic!("Invalid State"),
             State::SpGame(mut spg) => {
                 spg.update_simulation_realtime();
-                self.update_gui().await;
+                self.update_gui();
                 State::SpGame(spg)
             }
 
@@ -489,7 +489,7 @@ impl GameControllerBackend {
         };
     }
 
-    async fn update_gui(&mut self) {
+    fn update_gui(&mut self) {
         (self.update_callback)();
     }
 }

@@ -186,7 +186,6 @@ impl Server {
             }
 
             ClientMessage::OpenNewLobby(client_id) => {
-                let client_address = client_address;
                 let client = self.clients.get_mut(&client_id).unwrap();
 
                 if client.game.is_some() {
@@ -225,8 +224,6 @@ impl Server {
             }
             ClientMessage::JoinLobby(_, _) => todo!(),
             ClientMessage::GameUpdate(msg) => {
-                let msg = msg;
-                let client_address = client_address;
                 let Some(client) = self.clients.get_mut(&msg.client_id) else {
                     log::warn!("Ignoring update for unknown client {:?} from {}", msg.client_id, client_address);
                     return None;

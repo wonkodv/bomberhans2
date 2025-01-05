@@ -22,8 +22,7 @@ pub fn connect(server: SocketAddr, player_name: String) -> Connection {
     let (commands_to_backend, commands_from_frontend) = tokio::sync::mpsc::channel::<Command>(2);
     let (events_to_frontend, events_from_backend) = tokio::sync::mpsc::channel::<Event>(2);
     {
-        let server = server.clone();
-        let foo = tokio::spawn(async move {
+        tokio::spawn(async move {
             let mut comm =
                 CommunicationBackend::new(server, commands_from_frontend, events_to_frontend, player_name).await;
             {
