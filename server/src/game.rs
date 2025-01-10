@@ -1,20 +1,35 @@
 use crate::actor::{actor, Actor, Receiver};
 
-pub enum Command {
+pub enum Message {}
 
+#[derive(Debug)]
+struct Lobby {
+    id: GameId,
+    host: ClientId,
+    settings: Settings,
+    players: Vec<Player>,
 }
 
-pub fn game() -> Actor {
-    actor(|rx| Game {rx}.run())
+#[derive(Debug)]
+struct StartedGame {
+    id: GameId,
+    game_state: GameState,
+    updates: Vec<Update>,
+    future_updates: Vec<Update>,
+    old_updates: Vec<Update>,
 }
 
-struct Game {
-    rx: Receiver<Command>,
-
+pub enum Game {
+    Lobby(Lobby),
+    Game(StartedGame),
 }
 
-impl Game {
-    async fn run(self) {
+impl Actor<Message> for Game {
+    async fn handle_message(&mut self, message: Message) {
+        todo!()
+    }
 
+    async fn close(self) {
+        todo!()
     }
 }

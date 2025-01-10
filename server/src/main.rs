@@ -1,10 +1,32 @@
+use std::future::Future;
 use std::io::Write;
-
 use std::net::Ipv6Addr;
 use std::net::SocketAddr;
+use tokio::sync::mpsc::{channel, Sender};
+use tokio::task::JoinHandle;
 
-mod actor;
 mod server;
+mod actor;
+mod game;
+
+pub fn actor<F, M>(message_handler: F) -> (Sender<M>, JoinHandle<()>)
+where
+    M: Send,
+    F: FnMut(M) -> Future<Output = ()> + Send,
+{
+    let (tx, mut rx) = channel(8);
+
+    let jh = tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                None => return,
+                Some(command) => (message_handler)(command).await,
+            }
+        }
+    });
+
+    return (tx, jh);
+}
 
 #[tokio::main]
 async fn main() {
@@ -26,6 +48,7 @@ async fn main() {
     let socket = tokio::net::UdpSocket::bind(addr);
     log::info!("Listening on {addr}");
 
-    let server_name = "HansServer".to_string();
-    let server = server::server(server_name);
+    let server = server::Server::new("HansServer".to_string());
 }
+
+

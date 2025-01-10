@@ -10,24 +10,21 @@ use bomberhans_lib::field::Field;
 use bomberhans_lib::game_state::{GameState, Player};
 use bomberhans_lib::network::*;
 use bomberhans_lib::settings::Settings;
+use bomberhans_lib::utils::GameTime;
 use bomberhans_lib::utils::PlayerId;
 use bomberhans_lib::utils::Position;
-use bomberhans_lib::utils::GameTime;
-
-
-
-
-
-
-
 
 impl Game {
     fn remove_player(&mut self, player_id: PlayerId) {
         match self {
             Game::Lobby(lobby) => {
-                lobby
-                    .players
-                    .remove(lobby.players.iter().position(|p| p.id == player_id).expect("player to remove exists"));
+                lobby.players.remove(
+                    lobby
+                        .players
+                        .iter()
+                        .position(|p| p.id == player_id)
+                        .expect("player to remove exists"),
+                );
             }
             Game::Started(game) => todo!(),
             Game::Invalid => panic!(),
@@ -99,10 +96,19 @@ impl Server {
         let games = HashMap::new();
         let clients = HashMap::new();
 
-        Self { name, games, clients, last_sent_packet_number: 1 }
+        Self {
+            name,
+            games,
+            clients,
+            last_sent_packet_number: 1,
+        }
     }
 
-    pub fn handle_client_packet(&mut self, packet: ClientPacket, client_address: SocketAddr) -> Option<ServerPacket> {
+    pub fn handle_client_packet(
+        &mut self,
+        packet: ClientPacket,
+        client_address: SocketAddr,
+    ) -> Option<ServerPacket> {
         if packet.magic != BOMBERHANS_MAGIC_NO_V1 {
             log::warn!("ignoring unknown protocol {packet:?}");
             return None;
@@ -124,11 +130,10 @@ impl Server {
                             client.address
                         );
                         return None;
-
-                        if packet.packet_number <= client.last_received_packet_number {
-                            log::warn!("ignoring out of order packet {packet:?}");
-                            return None;
-                        }
+                    }
+                    if packet.packet_number <= client.last_received_packet_number {
+                        log::warn!("ignoring out of order packet {packet:?}");
+                        return None;
                     }
 
                     client.last_received_packet_number = packet.packet_number;
@@ -163,7 +168,10 @@ impl Server {
 
                 if let Some(old_client) = self.clients.insert(client_id, new_client) {
                     if let Some(game) = &old_client.game {
-                        self.games.get_mut(&game.game_id).unwrap().remove_player(game.player_id);
+                        self.games
+                            .get_mut(&game.game_id)
+                            .unwrap()
+                            .remove_player(game.player_id);
                     }
                 }
 
@@ -178,7 +186,12 @@ impl Server {
                     })
                     .collect();
 
-                Some(ServerMessage::GameList(ServerLobbyList { clients_packet_number, client_id, server_name, lobbies }))
+                Some(ServerMessage::GameList(ServerLobbyList {
+                    clients_packet_number,
+                    client_id,
+                    server_name,
+                    lobbies,
+                }))
             }
 
             ClientMessage::OpenNewLobby(client_id) => {
@@ -196,7 +209,11 @@ impl Server {
                 let start_positions = field.start_positions();
                 let start_position = Position::from_cell_position(start_positions[0]);
                 let player_id = bomberhans_lib::utils::PlayerId(0);
-                let players = vec![Player { name: client.name.clone(), id: player_id, start_position }];
+                let players = vec![Player {
+                    name: client.name.clone(),
+                    id: player_id,
+                    start_position,
+                }];
 
                 let old = self.games.insert(
                     game_id,
@@ -209,7 +226,11 @@ impl Server {
                 );
                 assert!(old.is_none());
 
-                client.game = Some(ClientGame { game_id, player_id, last_acknowledge_time: GameTime::new() });
+                client.game = Some(ClientGame {
+                    game_id,
+                    player_id,
+                    last_acknowledge_time: GameTime::new(),
+                });
 
                 Some(ServerMessage::LobbyUpdate(ServerLobbyUpdate {
                     client_player_id: player_id,
@@ -221,11 +242,19 @@ impl Server {
             ClientMessage::JoinLobby(_, _) => todo!(),
             ClientMessage::GameUpdate(msg) => {
                 let Some(client) = self.clients.get_mut(&msg.client_id) else {
-                    log::warn!("Ignoring update for unknown client {:?} from {}", msg.client_id, client_address);
+                    log::warn!(
+                        "Ignoring update for unknown client {:?} from {}",
+                        msg.client_id,
+                        client_address
+                    );
                     return None;
                 };
                 if client.address != client_address {
-                    log::warn!("Ignoring update for client {:?} from wrong address {}", msg.client_id, client_address);
+                    log::warn!(
+                        "Ignoring update for client {:?} from wrong address {}",
+                        msg.client_id,
+                        client_address
+                    );
                     return None;
                 }
 
@@ -241,7 +270,11 @@ impl Server {
 
                 client_game.last_acknowledge_time = msg.last_server_update;
 
-                let Game::Started(game) = self.games.get_mut(&client_game.game_id).expect("game exists") else {
+                let Game::Started(game) = self
+                    .games
+                    .get_mut(&client_game.game_id)
+                    .expect("game exists")
+                else {
                     log::warn!("Ignoring Client Game update for Lobby {msg:?}");
                     return None;
                 };
@@ -257,7 +290,10 @@ impl Server {
                 let client = self.clients.remove(&client_id).unwrap();
 
                 if let Some(game) = client.game {
-                    self.games.get_mut(&game.game_id).unwrap().remove_player(game.player_id);
+                    self.games
+                        .get_mut(&game.game_id)
+                        .unwrap()
+                        .remove_player(game.player_id);
                 }
                 // TODO: send LobbyUpdate to all other Players
                 None
@@ -297,15 +333,27 @@ impl Server {
                 };
                 let game = self.games.get_mut(&client_game.game_id);
                 let Some(game) = game else {
-                    log::warn!("discarding Start for unknown game  {:?} {:?}", client_id, client_game.game_id);
+                    log::warn!(
+                        "discarding Start for unknown game  {:?} {:?}",
+                        client_id,
+                        client_game.game_id
+                    );
                     return None;
                 };
                 let Game::Lobby(lobby) = game else {
-                    log::info!("discarding Start for started game  {:?} {:?}", client_id, client_game.game_id);
+                    log::info!(
+                        "discarding Start for started game  {:?} {:?}",
+                        client_id,
+                        client_game.game_id
+                    );
                     return None;
                 };
                 if lobby.host != client_id {
-                    log::warn!("discarding Start from non-host  {:?} {:?}", client_id, client_game.game_id);
+                    log::warn!(
+                        "discarding Start from non-host  {:?} {:?}",
+                        client_id,
+                        client_game.game_id
+                    );
                     return None;
                 }
 
@@ -328,7 +376,11 @@ impl Server {
 
         message.map(|message| {
             self.last_sent_packet_number += 1;
-            ServerPacket { magic: BOMBERHANS_MAGIC_NO_V1, packet_number: self.last_sent_packet_number, message }
+            ServerPacket {
+                magic: BOMBERHANS_MAGIC_NO_V1,
+                packet_number: self.last_sent_packet_number,
+                message,
+            }
         })
     }
 
@@ -345,7 +397,10 @@ impl Server {
                 if u.time > game.game_state.time {
                     game.future_updates.push(u);
                 } else if game.game_state.set_player_action(u.player, u.action) {
-                    game.updates.push(Update { time: game.game_state.time, ..u });
+                    game.updates.push(Update {
+                        time: game.game_state.time,
+                        ..u
+                    });
                 }
             }
 
@@ -412,15 +467,28 @@ impl Server {
         let field = Field::new(settings.width, settings.height);
         let start_positions = field.start_positions();
         let start_position = Position::from_cell_position(start_positions[0]);
-        let players =
-            vec![Player { name: client.name.clone(), id: bomberhans_lib::utils::PlayerId(0), start_position }];
+        let players = vec![Player {
+            name: client.name.clone(),
+            id: bomberhans_lib::utils::PlayerId(0),
+            start_position,
+        }];
 
         let old = self.games.insert(
             id,
-            Game::Lobby(Lobby { id, host: client_id, settings: settings.clone(), players: players.clone() }),
+            Game::Lobby(Lobby {
+                id,
+                host: client_id,
+                settings: settings.clone(),
+                players: players.clone(),
+            }),
         );
         assert!(old.is_none());
 
-        Some(ServerLobbyUpdate { client_player_id: bomberhans_lib::utils::PlayerId(0), settings, players, id })
+        Some(ServerLobbyUpdate {
+            client_player_id: bomberhans_lib::utils::PlayerId(0),
+            settings,
+            players,
+            id,
+        })
     }
 }
