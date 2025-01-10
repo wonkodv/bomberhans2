@@ -1,7 +1,7 @@
 use bomberhans_lib::field::Field;
 use bomberhans_lib::game_state::{Action, GameState, Player};
 use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::{PlayerId, Position, GameTime, TIME_PER_TICK};
+use bomberhans_lib::utils::{GameTime, PlayerId, Position, TIME_PER_TICK};
 use std::collections::VecDeque;
 use std::time;
 
@@ -47,7 +47,11 @@ impl SinglePlayerGame {
 
         let game_state = GameState::new(settings, players);
 
-        SinglePlayerGame { game_state, local_player, last_update: time::Instant::now() }
+        SinglePlayerGame {
+            game_state,
+            local_player,
+            last_update: time::Instant::now(),
+        }
     }
 
     /// proceed game time according to real time since last update

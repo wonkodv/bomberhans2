@@ -522,10 +522,7 @@ impl MyApp {
     }
 
     fn update_multiplayer_view(&mut self, ui: &mut egui::Ui, server_info: &ServerInfo) {
-        ui.heading(format!(
-            "Multiplayer Games on {}",
-            server_info.server_name,
-        ));
+        ui.heading(format!("Multiplayer Games on {}", server_info.server_name,));
         let button = ui.button("Host new Game");
         {
             let mut memory = ui.memory();
@@ -534,7 +531,8 @@ impl MyApp {
             }
         }
         if button.clicked() {
-            self.game_controller.open_new_lobby(self.app_settings.player_name.clone());
+            self.game_controller
+                .open_new_lobby(self.app_settings.player_name.clone());
         }
         if ui.button("Cancel").clicked() {
             self.game_controller.disconnect();
@@ -543,7 +541,8 @@ impl MyApp {
         for (game_id, game_name) in &server_info.lobbies {
             ui.horizontal(|ui| {
                 if ui.button("Join").clicked() {
-                    self.game_controller.join_lobby(*game_id, self.app_settings.player_name.clone());
+                    self.game_controller
+                        .join_lobby(*game_id, self.app_settings.player_name.clone());
                 }
                 ui.label(game_name);
             });

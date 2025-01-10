@@ -9,6 +9,7 @@ mod game;
 mod gui;
 mod multiplayer;
 
+// TODO: Tokio Main
 fn main() {
     let start = Instant::now();
 
@@ -36,5 +37,10 @@ fn main() {
         game_controller_backend.run().await;
     });
 
+
+    // TODO: spawn_blocking
     gui::gui(game_controller);
 }
+
+
+// TODO: coordinated shutdsown
