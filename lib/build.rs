@@ -16,7 +16,10 @@ fn main() {
     if !git_version.starts_with(&cargo_version) {
         println!("cargo:warning=expected git-version {git_version:?} to start with cargo-version {cargo_version:?}");
         // modify self to re-run git describe next time
-        let output = Command::new("touch").arg("build.rs").spawn().expect("can start touch");
+        let output = Command::new("touch")
+            .arg("build.rs")
+            .spawn()
+            .expect("can start touch");
     }
 
     println!("cargo:rustc-env=VERSION={git_version}");

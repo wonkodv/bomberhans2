@@ -160,7 +160,7 @@ fn message_timeout(message: &ClientMessage) -> Duration {
         ClientMessage::GetLobbyList => 100,
         ClientMessage::OpenNewLobby(_) => 100,
         ClientMessage::JoinLobby(_, _) => 100,
-        ClientMessage::LobbySettingsUpdate(_, _) => 100,
+        ClientMessage::UpdateLobbySettings(_, _) => 100,
         ClientMessage::LobbyReady(_) => 100,
         ClientMessage::GameStart(_) => 16,
         ClientMessage::GameUpdate(_) => 16,
@@ -336,7 +336,7 @@ impl ConnectionBackend {
             }
             Command::UpdateSettings(settings) => {
                 let client_id = self.client_id.expect("We have a client_id by now");
-                self.send_message(ClientMessage::LobbySettingsUpdate(client_id, settings))
+                self.send_message(ClientMessage::UpdateLobbySettings(client_id, settings))
                     .await;
             }
             Command::Start => {
@@ -367,7 +367,8 @@ impl ConnectionBackend {
         self.last_received_packet = packet.packet_number;
         self.received_packets.push((Instant::now(), packet.clone()));
 
-        if let Some((pending_ack_packet, sent_time, _timeout)) = self.unacknowledged_packet.as_ref() {
+        if let Some((pending_ack_packet, sent_time, _timeout)) = self.unacknowledged_packet.as_ref()
+        {
             if Some(pending_ack_packet.packet_number) == packet.ack_packet_number {
                 log::trace!("Packet acked: {:?}", pending_ack_packet.packet_number);
                 self.send_event(Event::Ping(sent_time.elapsed())).await;

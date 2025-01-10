@@ -107,7 +107,7 @@ pub enum ClientMessage {
     OpenNewLobby(String),
     /// Join lobby, with Player Name
     JoinLobby(GameId, String),
-    LobbySettingsUpdate(ClientId, Settings),
+    UpdateLobbySettings(ClientId, Settings),
     LobbyReady(ClientId),
     GameStart(ClientId),
     GameUpdate(ClientUpdate),
@@ -129,7 +129,7 @@ pub enum ServerMessage {
     LobbyList(ServerLobbyList),
     LobbyJoined(ClientId, ServerLobbyUpdate),
     LobbyUpdate(ServerLobbyUpdate),
-    Update(ServerUpdate),
+    Update(SeqrverUpdate),
     Pong,
     Bye,
 }
