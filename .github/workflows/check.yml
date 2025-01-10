@@ -29,16 +29,21 @@ jobs:
         run: |
           git fetch --depth=1 --tags --force
           echo "VERSION=$(git describe --tags --match 'v*')" | tee -a "$GITHUB_OUTPUT"
+
       - name: Install Toolchain
         run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+
       - name: Test
         run:  cargo test --verbose
+
       - name: Build
         run:  cargo build --verbose
+
       - name: Prepare upload
         run: |
             mkdir upload/
             cp target/debug/bomberhans2 upload/bomberhans2-${{ steps.version.outputs.VERSION }}
+
       - uses: actions/upload-artifact@v4
         name: Upload
         with:

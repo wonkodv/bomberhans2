@@ -4,10 +4,17 @@ build:
 
 server: build
     cargo run --bin bomberhans2-server
-#   while true; do target/debug/bomberhans2-server & pid=$! ; inotifywait -e modify  target/debug/bomberhans2-server; kill $pid; done
+
+rkr-server:
+    rkr target/debug/bomberhans2-server
+
+rkr-client:
+    rkr target/debug/bomberhans2
 
 client: build
     cargo run --bin bomberhans2
 
 both: build
-    target/debug/bomberhans2-server & pid=$!; target/debug/bomberhans2; kill $pid
+    kitty bash -c "target/debug/bomberhans2-server | tee .server-log" &
+    kitty bash -c "target/debug/bomberhans2        | tee .client-log" &
+    target/debug/bomberhans2

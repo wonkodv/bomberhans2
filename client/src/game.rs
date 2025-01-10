@@ -1,14 +1,14 @@
 use bomberhans_lib::field::Field;
 use bomberhans_lib::game_state::{Action, GameState, Player};
 use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::{PlayerId, Position, TimeStamp, TIME_PER_TICK};
+use bomberhans_lib::utils::{PlayerId, Position, GameTime, TIME_PER_TICK};
 use std::collections::VecDeque;
 use std::time;
 
 #[derive(Debug)]
 pub struct MultiPlayerGame {
     server_state: GameState,
-    local_actions: VecDeque<(TimeStamp, Action)>,
+    local_actions: VecDeque<(GameTime, Action)>,
     local_state: GameState,
     last_local_update: std::time::Instant,
 }

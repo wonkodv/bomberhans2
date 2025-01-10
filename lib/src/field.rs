@@ -5,7 +5,7 @@ use std::ops::IndexMut;
 use crate::settings::Settings;
 use crate::utils::CellPosition;
 use crate::utils::PlayerId;
-use crate::utils::TimeStamp;
+use crate::utils::GameTime;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum Upgrade {
@@ -31,11 +31,11 @@ pub enum Cell {
     Bomb {
         owner: PlayerId,
         power: u32,
-        expire: TimeStamp,
+        expire: GameTime,
     },
     Fire {
         owner: PlayerId,
-        expire: TimeStamp,
+        expire: GameTime,
     },
     TombStone(PlayerId),
     Upgrade(Upgrade),
@@ -44,7 +44,7 @@ pub enum Cell {
     Wall,
     Wood,
     WoodBurning {
-        expire: TimeStamp,
+        expire: GameTime,
     },
 }
 
@@ -72,7 +72,7 @@ impl Cell {
     pub fn from_char(chr: char) -> Result<Self, String> {
         let owner = PlayerId(0);
         let power = 3;
-        let expire = TimeStamp::default(); // everything expires on 1st tick
+        let expire = GameTime::default(); // everything expires on 1st tick
 
         let cell = match chr {
             '_' => Cell::Empty,

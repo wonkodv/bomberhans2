@@ -8,16 +8,16 @@ use bomberhans_lib::network::GameId;
 use bomberhans_lib::network::ServerUpdate;
 use bomberhans_lib::network::Update;
 use bomberhans_lib::settings::Settings;
+use bomberhans_lib::utils::GameTime;
 use bomberhans_lib::utils::PlayerId;
-use bomberhans_lib::utils::TimeStamp;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
-use crate::connection;
-use crate::connection::connect;
-use crate::connection::Connection;
-use crate::connection::ServerInfo;
+use crate::communication;
+use crate::communication::connect;
+use crate::communication::Connection;
+use crate::communication::ServerInfo;
 use crate::game::SinglePlayerGame;
 
 /// Update Local Copy of Servers `GameState` and predict local `GameState`
@@ -82,14 +82,17 @@ pub enum State {
     /// Server not responding
     MpServerLost(GameState),
 
-    /// Server disconnected us
-    Disconnected,
+    /// Connection Lost (reason)
+    Disconnected(String),
 
     /// User clicked Exit
     GuiClosed,
 
     /// State machine in transition, should never be observed
     Invalid,
+    MpJoiningLobby {
+        game_id: GameId,
+    },
 }
 
 pub fn controller() -> (GameController, GameControllerBackend) {
@@ -101,42 +104,30 @@ pub fn controller() -> (GameController, GameControllerBackend) {
     (frontend, backend)
 }
 
+struct UpdateCallback(Box<dyn Fn() + Send>);
+
+impl std::fmt::Debug for UpdateCallback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Callback {}", self as *const _ as usize)
+    }
+}
+
+#[derive(Debug)]
+#[allow(private_interfaces)]
 pub enum Command {
-    SetUpdateCallback(Box<dyn Fn() + Send>),
+    SetUpdateCallback(UpdateCallback),
     SetAction(Action),
     ConfigureLocalGame,
     StartLocalGame,
-    ConnectToServer { server: SocketAddr, player_name: String },
-    OpenNewLobby,
-    JoinLobby(GameId),
+    ConnectToServer(SocketAddr),
+    OpenNewLobby(String),
+    JoinLobby(GameId, String),
     UpdateSettings(Settings),
     StartMultiplayerGame,
     GetState(tokio::sync::oneshot::Sender<State>),
+    GetPing(tokio::sync::oneshot::Sender<Option<Duration>>),
     Disconnect,
     Quit,
-}
-
-impl std::fmt::Debug for Command {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Command::SetUpdateCallback(_) => write!(f, "SetUpdateCallback"),
-            Command::SetAction(action) => write!(f, "SetAction({action:?})"),
-            Command::StartLocalGame => write!(f, "StartLocalGame"),
-            Command::ConnectToServer { server, player_name } => {
-                write!(f, "ConnectToServer {{{server:?}, {player_name:?} }}")
-            }
-            Command::OpenNewLobby => write!(f, "OpenNewLobby"),
-            Command::JoinLobby(game_id) => write!(f, "JoinLobby({game_id:?})"),
-            Command::UpdateSettings(_settings) => {
-                write!(f, "UpdateSettings(settings)")
-            }
-            Command::StartMultiplayerGame => write!(f, "StartMultiplayerGame"),
-            Command::GetState(_tx) => write!(f, "GetState()"),
-            Command::Disconnect => write!(f, "Disconnect"),
-            Command::ConfigureLocalGame => write!(f, "ConfigureLocalGame"),
-            Command::Quit => write!(f, "Quit"),
-        }
-    }
 }
 
 pub struct GameController {
@@ -145,13 +136,18 @@ pub struct GameController {
 
 impl GameController {
     pub fn set_update_callback(&mut self, callback: Box<dyn Fn() + Send>) {
-        self.tx.blocking_send(Command::SetUpdateCallback(callback)).map_err(|e| format!("{e:#?}")).unwrap();
+        self.tx
+            .blocking_send(Command::SetUpdateCallback(UpdateCallback(callback)))
+            .map_err(|e| format!("{e:#?}"))
+            .unwrap();
     }
     pub fn set_action(&mut self, action: Action) {
         self.tx.blocking_send(Command::SetAction(action)).unwrap();
     }
-    pub fn open_new_lobby(&mut self) {
-        self.tx.blocking_send(Command::OpenNewLobby).unwrap();
+    pub fn open_new_lobby(&mut self, player_name: String) {
+        self.tx
+            .blocking_send(Command::OpenNewLobby(player_name))
+            .unwrap();
     }
     //   pub fn configure_local_game(&mut self) {
     //       self.tx.blocking_send(Command::ConfigureLocalGame).unwrap();
@@ -159,17 +155,25 @@ impl GameController {
     pub fn start_local_game(&mut self) {
         self.tx.blocking_send(Command::StartLocalGame).unwrap();
     }
-    pub fn connect_to_server(&mut self, server: SocketAddr, player_name: String) {
-        self.tx.blocking_send(Command::ConnectToServer { server, player_name }).unwrap();
+    pub fn connect_to_server(&mut self, server: SocketAddr) {
+        self.tx
+            .blocking_send(Command::ConnectToServer(server))
+            .unwrap();
     }
-    pub fn join_lobby(&mut self, id: GameId) {
-        self.tx.blocking_send(Command::JoinLobby(id)).unwrap();
+    pub fn join_lobby(&mut self, lobby_id: GameId, player_name: String) {
+        self.tx
+            .blocking_send(Command::JoinLobby(lobby_id, player_name))
+            .unwrap();
     }
     pub fn update_settings(&mut self, new_settings: Settings) {
-        self.tx.blocking_send(Command::UpdateSettings(new_settings)).unwrap();
+        self.tx
+            .blocking_send(Command::UpdateSettings(new_settings))
+            .unwrap();
     }
     pub fn start_multiplayer_game(&mut self) {
-        self.tx.blocking_send(Command::StartMultiplayerGame).unwrap();
+        self.tx
+            .blocking_send(Command::StartMultiplayerGame)
+            .unwrap();
     }
     pub fn get_state(&self) -> State {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -180,6 +184,13 @@ impl GameController {
             },
             Err(err) => panic!("Controller Paniced"),
         }
+    }
+    pub fn get_ping(&self) -> Option<Duration> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .blocking_send(Command::GetPing(tx))
+            .expect("Controller doesn't panic");
+        rx.blocking_recv().expect("controller doesn't panic")
     }
     pub fn disconnect(&self) {
         self.tx.blocking_send(Command::Disconnect).unwrap();
@@ -202,14 +213,23 @@ pub struct GameControllerBackend {
     connection: Option<Connection>,
 
     /// callback to inform gui something new has happend
-    update_callback: Box<dyn Fn() + Send>,
+    update_callback: UpdateCallback,
 
     rx_from_frontend: Receiver<Command>,
+
+    /// Server's response time
+    ping: Option<Duration>,
 }
 
 impl GameControllerBackend {
     fn new(rx_from_frontend: Receiver<Command>) -> Self {
-        Self { state: State::Initial, connection: None, rx_from_frontend, update_callback: Box::new(|| {}) }
+        Self {
+            state: State::Initial,
+            connection: None,
+            rx_from_frontend,
+            update_callback: UpdateCallback(Box::new(|| panic!("no gui callback set"))),
+            ping: None,
+        }
     }
 
     pub async fn run(&mut self) {
@@ -238,35 +258,103 @@ impl GameControllerBackend {
         }
     }
 
-    async fn handle_server_event(&mut self, event: connection::Event) {
+    async fn handle_server_event(&mut self, event: communication::Event) {
         let previous_state = std::mem::replace(&mut self.state, State::Invalid);
         self.state = match (event, previous_state) {
             (_, State::Invalid) => panic!("Invalid State"),
-            (_, State::Disconnected) | (connection::Event::Disconnected, _) => State::Disconnected,
-
-            (connection::Event::GameListUpdated(server_info), State::MpConnecting)
-            | (connection::Event::GameListUpdated(server_info), State::MpView(_)) => State::MpView(server_info),
-
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpOpeningNewLobby)
-            | (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpLobbyHost { .. }) => {
-                State::MpLobbyHost { settings, players, local_player_id }
+            (communication::Event::Error(e), _) => {
+                // TODO: display something
+                State::Disconnected(format!("Communication Error {e}"))
+            }
+            //           (communication::Event::Disconnected, _) => {
+            //               State::Disconnected(format!("server kicked us? "))
+            //           }
+            (_, State::Disconnected(msg)) => State::Disconnected(msg),
+            (communication::Event::Ping(ping), state) => {
+                self.ping = Some(ping);
+                state
             }
 
-            (connection::Event::Update(update), State::MpLobbyGuest { settings, players, local_player_id })
-            | (connection::Event::Update(update), State::MpLobbyHost { settings, players, local_player_id }) => {
+            (communication::Event::GameListUpdated(server_info), State::MpConnecting)
+            | (communication::Event::GameListUpdated(server_info), State::MpView(_)) => {
+                State::MpView(server_info)
+            }
+
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpJoiningLobby { game_id },
+            ) => State::MpLobbyGuest {
+                settings,
+                players,
+                local_player_id,
+            },
+
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpOpeningNewLobby,
+            )
+            | (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpLobbyHost { .. },
+            ) => State::MpLobbyHost {
+                settings,
+                players,
+                local_player_id,
+            },
+
+            (
+                communication::Event::Update(update),
+                State::MpLobbyGuest {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+            )
+            | (
+                communication::Event::Update(update),
+                State::MpLobbyHost {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+            ) => {
                 let server_game_state = GameState::new(settings, players);
 
-                let local_update = Update { player: local_player_id, action: Action::idle(), time: TimeStamp::new() };
+                let local_update = Update {
+                    player: local_player_id,
+                    action: Action::idle(),
+                    time: GameTime::new(),
+                };
                 let (server_game_state, local_game_state) =
                     synchronize_simulation(server_game_state, update, &local_update);
                 log::info!("First Server Update received, local state updated");
 
-                State::MpGame { server_game_state, local_game_state, local_update }
+                State::MpGame {
+                    server_game_state,
+                    local_game_state,
+                    local_update,
+                }
             }
 
             (
-                connection::Event::Update(update),
-                State::MpGame { server_game_state, local_update, local_game_state: old_local_game_state },
+                communication::Event::Update(update),
+                State::MpGame {
+                    server_game_state,
+                    local_update,
+                    local_game_state: old_local_game_state,
+                },
             ) => {
                 let (server_game_state, local_game_state) =
                     synchronize_simulation(server_game_state, update, &local_update);
@@ -279,41 +367,126 @@ impl GameControllerBackend {
                         local_game_state.players[&local_update.player].1
                     );
                 }
-                State::MpGame { server_game_state, local_game_state, local_update }
+                State::MpGame {
+                    server_game_state,
+                    local_game_state,
+                    local_update,
+                }
             }
             //
-            (connection::Event::GameListUpdated(_), State::Initial) => todo!(),
-            (connection::Event::GameListUpdated(_), State::SpSettings) => todo!(),
-            (connection::Event::GameListUpdated(_), State::SpGame(_)) => todo!(),
-            (connection::Event::GameListUpdated(_), State::MpOpeningNewLobby) => todo!(),
-            (connection::Event::GameListUpdated(_), State::MpLobbyGuest { settings, players, local_player_id }) => {
+            (communication::Event::GameListUpdated(_), State::Initial) => todo!(),
+            (communication::Event::GameListUpdated(_), State::SpSettings) => todo!(),
+            (communication::Event::GameListUpdated(_), State::SpGame(_)) => todo!(),
+            (communication::Event::GameListUpdated(_), State::MpOpeningNewLobby) => todo!(),
+            (
+                communication::Event::GameListUpdated(_),
+                State::MpLobbyGuest {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+            ) => {
                 todo!()
             }
-            (connection::Event::GameListUpdated(_), State::MpLobbyHost { settings, players, local_player_id }) => {
+            (
+                communication::Event::GameListUpdated(_),
+                State::MpLobbyHost {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+            ) => {
                 todo!()
             }
-            (connection::Event::GameListUpdated(_), State::MpGame { .. }) => todo!(),
-            (connection::Event::GameListUpdated(_), State::MpServerLost(_)) => todo!(),
-            (connection::Event::GameListUpdated(_), State::GuiClosed) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::Initial) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::SpSettings) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::SpGame(_)) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpConnecting) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpView(_)) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpLobbyGuest { .. }) => {
+            (communication::Event::GameListUpdated(_), State::MpGame { .. }) => todo!(),
+            (communication::Event::GameListUpdated(_), State::MpServerLost(_)) => todo!(),
+            (communication::Event::GameListUpdated(_), State::GuiClosed) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::Initial,
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::SpSettings,
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::SpGame(_),
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpConnecting,
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpView(_),
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpLobbyGuest { .. },
+            ) => {
                 todo!()
             }
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpGame { .. }) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::MpServerLost(_)) => todo!(),
-            (connection::Event::LobbyUpdated { settings, players, local_player_id }, State::GuiClosed) => todo!(),
-            (connection::Event::Update(_), State::Initial) => todo!(),
-            (connection::Event::Update(_), State::SpSettings) => todo!(),
-            (connection::Event::Update(_), State::SpGame(_)) => todo!(),
-            (connection::Event::Update(_), State::MpConnecting) => todo!(),
-            (connection::Event::Update(_), State::MpView(_)) => todo!(),
-            (connection::Event::Update(_), State::MpOpeningNewLobby) => todo!(),
-            (connection::Event::Update(_), State::MpServerLost(_)) => todo!(),
-            (connection::Event::Update(_), State::GuiClosed) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpGame { .. },
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::MpServerLost(_),
+            ) => todo!(),
+            (
+                communication::Event::LobbyUpdated {
+                    settings,
+                    players,
+                    local_player_id,
+                },
+                State::GuiClosed,
+            ) => todo!(),
+            (communication::Event::Update(_), State::Initial) => todo!(),
+            (communication::Event::Update(_), State::SpSettings) => todo!(),
+            (communication::Event::Update(_), State::SpGame(_)) => todo!(),
+            (communication::Event::Update(_), State::MpConnecting) => todo!(),
+            (communication::Event::Update(_), State::MpView(_)) => todo!(),
+            (communication::Event::Update(_), State::MpOpeningNewLobby) => todo!(),
+            (communication::Event::Update(_), State::MpServerLost(_)) => todo!(),
+            (communication::Event::Update(_), State::GuiClosed) => todo!(),
+            (communication::Event::GameListUpdated(_), State::MpJoiningLobby { game_id }) => {
+                todo!()
+            }
+            (communication::Event::Update(_), State::MpJoiningLobby { game_id }) => todo!(),
         };
 
         self.update_gui();
@@ -331,56 +504,123 @@ impl GameControllerBackend {
                 return_channel.send(state.clone()).unwrap();
                 state
             }
+            (Command::GetPing(return_channel), state) => {
+                return_channel.send(self.ping).unwrap();
+                state
+            }
             (Command::Disconnect, _) => {
-                if let Some(connection) = self.connection.as_ref() {
+                if let Some(connection) = self.connection.take() {
                     connection.disconnect().await;
                 }
+                self.ping = None;
                 State::Initial
             }
             (Command::Quit, _) => {
-                if let Some(connection) = self.connection.as_ref() {
+                if let Some(connection) = self.connection.take() {
                     connection.disconnect().await;
                 }
+                self.ping = None;
                 State::GuiClosed
             }
             (Command::StartLocalGame, State::Initial) => {
-                State::SpGame(SinglePlayerGame::new(Settings::default() /*TODO: make settings configurable*/))
+                State::SpGame(SinglePlayerGame::new(
+                    Settings::default(), /*TODO: make settings configurable*/
+                ))
             }
             (Command::SetAction(action), State::SpGame(mut game_state)) => {
                 game_state.set_local_player_action(action);
                 State::SpGame(game_state)
             }
-            (Command::ConnectToServer { server, player_name }, State::Initial) => {
-                self.connection = Some(connect(server, player_name));
+            (Command::ConnectToServer(server), State::Initial) => {
+                self.connection = Some(connect(server));
                 State::MpConnecting
             }
-            (Command::OpenNewLobby, State::MpView(_)) => {
-                self.connection.as_ref().unwrap().open_new_lobby().await;
+            (Command::JoinLobby(game_id, player_name), State::MpView(_)) => {
+                self.connection
+                    .as_ref()
+                    .unwrap()
+                    .join_lobby(game_id, player_name)
+                    .await;
+                State::MpJoiningLobby { game_id }
+            }
+            (Command::OpenNewLobby(player_name), State::MpView(_)) => {
+                self.connection
+                    .as_ref()
+                    .unwrap()
+                    .open_new_lobby(player_name)
+                    .await;
                 State::MpOpeningNewLobby
             }
             //(Command::UpdateSettings(settings), State::SpSettings(_)) => SpSettings(settings),
-            (Command::UpdateSettings(settings), State::MpLobbyHost { players, local_player_id, .. }) => {
-                self.connection.as_ref().unwrap().update_settings(settings.clone()).await;
-                State::MpLobbyHost { settings, players, local_player_id }
+            (
+                Command::UpdateSettings(settings),
+                State::MpLobbyHost {
+                    players,
+                    local_player_id,
+                    ..
+                },
+            ) => {
+                self.connection
+                    .as_ref()
+                    .unwrap()
+                    .update_settings(settings.clone())
+                    .await;
+                State::MpLobbyHost {
+                    settings,
+                    players,
+                    local_player_id,
+                }
             }
-            (Command::StartMultiplayerGame, State::MpLobbyHost { players, local_player_id, settings }) => {
+            (
+                Command::StartMultiplayerGame,
+                State::MpLobbyHost {
+                    players,
+                    local_player_id,
+                    settings,
+                },
+            ) => {
                 self.connection.as_ref().unwrap().start().await;
-                let local_update = Update { player: local_player_id, action: Action::idle(), time: TimeStamp::new() };
+                let local_update = Update {
+                    player: local_player_id,
+                    action: Action::idle(),
+                    time: GameTime::new(),
+                };
                 let server_game_state = GameState::new(settings, players);
                 let local_game_state = server_game_state.clone(); // TODO: simulate some ticks into the
                                                                   // future?
-                State::MpGame { server_game_state, local_game_state, local_update }
+                State::MpGame {
+                    server_game_state,
+                    local_game_state,
+                    local_update,
+                }
             }
             (
                 Command::SetAction(action),
-                State::MpGame { server_game_state, mut local_game_state, local_update: old_local_update },
+                State::MpGame {
+                    server_game_state,
+                    mut local_game_state,
+                    local_update: old_local_update,
+                },
             ) => {
-                let local_update = Update { action, time: local_game_state.time, player: old_local_update.player };
+                let local_update = Update {
+                    action,
+                    time: local_game_state.time,
+                    player: old_local_update.player,
+                };
                 if local_game_state.set_player_action(local_update.player, action) {
-                    self.connection.as_ref().unwrap().set_action(local_update.time, local_update.action).await;
+                    self.connection
+                        .as_ref()
+                        .unwrap()
+                        .set_action(local_update.time, local_update.action)
+                        .await;
                 }
-                State::MpGame { server_game_state, local_game_state, local_update }
+                State::MpGame {
+                    server_game_state,
+                    local_game_state,
+                    local_update,
+                }
             }
+
             //
             (Command::SetAction(_), State::Initial) => todo!(),
             (Command::SetAction(_), State::SpSettings) => todo!(),
@@ -390,7 +630,9 @@ impl GameControllerBackend {
             (Command::SetAction(_), State::MpLobbyGuest { .. }) => todo!(),
             (Command::SetAction(_), State::MpLobbyHost { .. }) => todo!(),
             (Command::SetAction(_), State::MpServerLost(_)) => todo!(),
+            (Command::SetAction(_), State::Disconnected(_)) => todo!(),
             (Command::SetAction(_), State::GuiClosed) => todo!(),
+            (Command::SetAction(_), State::MpJoiningLobby { .. }) => todo!(),
             (Command::ConfigureLocalGame, State::Initial) => todo!(),
             (Command::ConfigureLocalGame, State::SpSettings) => todo!(),
             (Command::ConfigureLocalGame, State::SpGame(_)) => todo!(),
@@ -401,7 +643,9 @@ impl GameControllerBackend {
             (Command::ConfigureLocalGame, State::MpLobbyHost { .. }) => todo!(),
             (Command::ConfigureLocalGame, State::MpGame { .. }) => todo!(),
             (Command::ConfigureLocalGame, State::MpServerLost(_)) => todo!(),
+            (Command::ConfigureLocalGame, State::Disconnected(_)) => todo!(),
             (Command::ConfigureLocalGame, State::GuiClosed) => todo!(),
+            (Command::ConfigureLocalGame, State::MpJoiningLobby { .. }) => todo!(),
             (Command::StartLocalGame, State::SpSettings) => todo!(),
             (Command::StartLocalGame, State::SpGame(_)) => todo!(),
             (Command::StartLocalGame, State::MpConnecting) => todo!(),
@@ -411,38 +655,45 @@ impl GameControllerBackend {
             (Command::StartLocalGame, State::MpLobbyHost { .. }) => todo!(),
             (Command::StartLocalGame, State::MpGame { .. }) => todo!(),
             (Command::StartLocalGame, State::MpServerLost(_)) => todo!(),
+            (Command::StartLocalGame, State::Disconnected(_)) => todo!(),
             (Command::StartLocalGame, State::GuiClosed) => todo!(),
-            (Command::ConnectToServer { .. }, State::SpSettings) => todo!(),
-            (Command::ConnectToServer { .. }, State::SpGame(_)) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpConnecting) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpView(_)) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpOpeningNewLobby) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpLobbyGuest { .. }) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpLobbyHost { .. }) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpGame { .. }) => todo!(),
-            (Command::ConnectToServer { .. }, State::MpServerLost(_)) => todo!(),
-            (Command::ConnectToServer { .. }, State::GuiClosed) => todo!(),
-            (Command::OpenNewLobby, State::Initial) => todo!(),
-            (Command::OpenNewLobby, State::SpSettings) => todo!(),
-            (Command::OpenNewLobby, State::SpGame(_)) => todo!(),
-            (Command::OpenNewLobby, State::MpConnecting) => todo!(),
-            (Command::OpenNewLobby, State::MpOpeningNewLobby) => todo!(),
-            (Command::OpenNewLobby, State::MpLobbyGuest { .. }) => todo!(),
-            (Command::OpenNewLobby, State::MpLobbyHost { .. }) => todo!(),
-            (Command::OpenNewLobby, State::MpGame { .. }) => todo!(),
-            (Command::OpenNewLobby, State::MpServerLost(_)) => todo!(),
-            (Command::OpenNewLobby, State::GuiClosed) => todo!(),
-            (Command::JoinLobby(_), State::Initial) => todo!(),
-            (Command::JoinLobby(_), State::SpSettings) => todo!(),
-            (Command::JoinLobby(_), State::SpGame(_)) => todo!(),
-            (Command::JoinLobby(_), State::MpConnecting) => todo!(),
-            (Command::JoinLobby(_), State::MpView(_)) => todo!(),
-            (Command::JoinLobby(_), State::MpOpeningNewLobby) => todo!(),
-            (Command::JoinLobby(_), State::MpLobbyGuest { .. }) => todo!(),
-            (Command::JoinLobby(_), State::MpLobbyHost { .. }) => todo!(),
-            (Command::JoinLobby(_), State::MpGame { .. }) => todo!(),
-            (Command::JoinLobby(_), State::MpServerLost(_)) => todo!(),
-            (Command::JoinLobby(_), State::GuiClosed) => todo!(),
+            (Command::StartLocalGame, State::MpJoiningLobby { .. }) => todo!(),
+            (Command::ConnectToServer(_), State::SpSettings) => todo!(),
+            (Command::ConnectToServer(_), State::SpGame(_)) => todo!(),
+            (Command::ConnectToServer(_), State::MpConnecting) => todo!(),
+            (Command::ConnectToServer(_), State::MpView(_)) => todo!(),
+            (Command::ConnectToServer(_), State::MpOpeningNewLobby) => todo!(),
+            (Command::ConnectToServer(_), State::MpLobbyGuest { .. }) => todo!(),
+            (Command::ConnectToServer(_), State::MpLobbyHost { .. }) => todo!(),
+            (Command::ConnectToServer(_), State::MpGame { .. }) => todo!(),
+            (Command::ConnectToServer(_), State::MpServerLost(_)) => todo!(),
+            (Command::ConnectToServer(_), State::Disconnected(_)) => todo!(),
+            (Command::ConnectToServer(_), State::GuiClosed) => todo!(),
+            (Command::ConnectToServer(_), State::MpJoiningLobby { .. }) => todo!(),
+            (Command::OpenNewLobby(_), State::Initial) => todo!(),
+            (Command::OpenNewLobby(_), State::SpSettings) => todo!(),
+            (Command::OpenNewLobby(_), State::SpGame(_)) => todo!(),
+            (Command::OpenNewLobby(_), State::MpConnecting) => todo!(),
+            (Command::OpenNewLobby(_), State::MpOpeningNewLobby) => todo!(),
+            (Command::OpenNewLobby(_), State::MpLobbyGuest { .. }) => todo!(),
+            (Command::OpenNewLobby(_), State::MpLobbyHost { .. }) => todo!(),
+            (Command::OpenNewLobby(_), State::MpGame { .. }) => todo!(),
+            (Command::OpenNewLobby(_), State::MpServerLost(_)) => todo!(),
+            (Command::OpenNewLobby(_), State::Disconnected(_)) => todo!(),
+            (Command::OpenNewLobby(_), State::GuiClosed) => todo!(),
+            (Command::OpenNewLobby(_), State::MpJoiningLobby { .. }) => todo!(),
+            (Command::JoinLobby(_, _), State::Initial) => todo!(),
+            (Command::JoinLobby(_, _), State::SpSettings) => todo!(),
+            (Command::JoinLobby(_, _), State::SpGame(_)) => todo!(),
+            (Command::JoinLobby(_, _), State::MpConnecting) => todo!(),
+            (Command::JoinLobby(_, _), State::MpOpeningNewLobby) => todo!(),
+            (Command::JoinLobby(_, _), State::MpLobbyGuest { .. }) => todo!(),
+            (Command::JoinLobby(_, _), State::MpLobbyHost { .. }) => todo!(),
+            (Command::JoinLobby(_, _), State::MpGame { .. }) => todo!(),
+            (Command::JoinLobby(_, _), State::MpServerLost(_)) => todo!(),
+            (Command::JoinLobby(_, _), State::Disconnected(_)) => todo!(),
+            (Command::JoinLobby(_, _), State::GuiClosed) => todo!(),
+            (Command::JoinLobby(_, _), State::MpJoiningLobby { .. }) => todo!(),
             (Command::UpdateSettings(_), State::Initial) => todo!(),
             (Command::UpdateSettings(_), State::SpSettings) => todo!(),
             (Command::UpdateSettings(_), State::SpGame(_)) => todo!(),
@@ -452,7 +703,9 @@ impl GameControllerBackend {
             (Command::UpdateSettings(_), State::MpLobbyGuest { .. }) => todo!(),
             (Command::UpdateSettings(_), State::MpGame { .. }) => todo!(),
             (Command::UpdateSettings(_), State::MpServerLost(_)) => todo!(),
+            (Command::UpdateSettings(_), State::Disconnected(_)) => todo!(),
             (Command::UpdateSettings(_), State::GuiClosed) => todo!(),
+            (Command::UpdateSettings(_), State::MpJoiningLobby { .. }) => todo!(),
             (Command::StartMultiplayerGame, State::Initial) => todo!(),
             (Command::StartMultiplayerGame, State::SpSettings) => todo!(),
             (Command::StartMultiplayerGame, State::SpGame(_)) => todo!(),
@@ -462,15 +715,9 @@ impl GameControllerBackend {
             (Command::StartMultiplayerGame, State::MpLobbyGuest { .. }) => todo!(),
             (Command::StartMultiplayerGame, State::MpGame { .. }) => todo!(),
             (Command::StartMultiplayerGame, State::MpServerLost(_)) => todo!(),
+            (Command::StartMultiplayerGame, State::Disconnected(_)) => todo!(),
             (Command::StartMultiplayerGame, State::GuiClosed) => todo!(),
-            (Command::SetAction(_), State::Disconnected) => todo!(),
-            (Command::ConfigureLocalGame, State::Disconnected) => todo!(),
-            (Command::StartLocalGame, State::Disconnected) => todo!(),
-            (Command::ConnectToServer { server, player_name }, State::Disconnected) => todo!(),
-            (Command::OpenNewLobby, State::Disconnected) => todo!(),
-            (Command::JoinLobby(_), State::Disconnected) => todo!(),
-            (Command::UpdateSettings(_), State::Disconnected) => todo!(),
-            (Command::StartMultiplayerGame, State::Disconnected) => todo!(),
+            (Command::StartMultiplayerGame, State::MpJoiningLobby { .. }) => todo!(),
         };
     }
 
@@ -490,6 +737,6 @@ impl GameControllerBackend {
     }
 
     fn update_gui(&mut self) {
-        (self.update_callback)();
+        (self.update_callback.0)();
     }
 }

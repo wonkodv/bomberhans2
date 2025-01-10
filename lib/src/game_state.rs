@@ -8,11 +8,11 @@ use crate::settings::Settings;
 use crate::utils::random;
 use crate::utils::CellPosition;
 use crate::utils::Direction;
-use crate::utils::Duration;
+use crate::utils::GameTimeDiff;
 use crate::utils::Idx;
 use crate::utils::PlayerId;
 use crate::utils::Position;
-use crate::utils::TimeStamp;
+use crate::utils::GameTime;
 use crate::utils::TICKS_PER_SECOND;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -131,7 +131,7 @@ impl fmt::Debug for Action {
 /// The variable state of the game at a given time
 #[derive(Debug, Clone)]
 pub struct GameState {
-    pub time: TimeStamp,
+    pub time: GameTime,
     pub field: Field,
     pub players: BTreeMap<PlayerId, (Player, PlayerState)>,
     pub settings: Settings,
@@ -140,7 +140,7 @@ pub struct GameState {
 /// APIs
 impl GameState {
     pub fn new(settings: Settings, players: Vec<Player>) -> Self {
-        let time = TimeStamp::default();
+        let time = GameTime::default();
 
         let players: BTreeMap<PlayerId, (Player, PlayerState)> = players
             .into_iter()
@@ -184,7 +184,7 @@ impl GameState {
 /// Update functions, that modify the Game State
 impl GameState {
     fn increment_game_time(&mut self) {
-        self.time = self.time + Duration::from_ticks(1);
+        self.time = self.time + GameTimeDiff::from_ticks(1);
     }
 
     /// advance a player 1 tick
@@ -511,11 +511,11 @@ mod test {
 
     #[test]
     fn test_random() {
-        let r = random(TimeStamp::default(), 0, 0);
-        assert_eq!(r, random(TimeStamp::default(), 0, 0));
-        assert!(r != random(TimeStamp::default() + Duration::from_ticks(1), 0, 0));
-        assert!(r != random(TimeStamp::default(), 1, 0));
-        assert!(r != random(TimeStamp::default(), 0, 1));
+        let r = random(GameTime::default(), 0, 0);
+        assert_eq!(r, random(GameTime::default(), 0, 0));
+        assert!(r != random(GameTime::default() + GameTimeDiff::from_ticks(1), 0, 0));
+        assert!(r != random(GameTime::default(), 1, 0));
+        assert!(r != random(GameTime::default(), 0, 1));
     }
 
     fn game() -> GameState {
@@ -576,7 +576,7 @@ mod test {
     fn test_bomb_explodes_after_time() {
         let mut gs = game();
         let x = CellPosition::new(1, 1);
-        gs.field[x] = Cell::Bomb { owner: PlayerId(0), power: 1, expire: gs.time + Duration::from_ticks(3) };
+        gs.field[x] = Cell::Bomb { owner: PlayerId(0), power: 1, expire: gs.time + GameTimeDiff::from_ticks(3) };
         gs.increment_game_time();
         gs.update_field();
         if let Cell::Bomb { .. } = gs.field[x] {

@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::field::Cell;
 use crate::field::Upgrade;
-use crate::utils::Duration;
+use crate::utils::GameTimeDiff;
 
 /// Ratios of Wood turning into those cell types:
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -187,14 +187,14 @@ impl Settings {
         self.speed_base + (player_speed * self.speed_multiplyer)
     }
 
-    pub fn bomb_explode_time(&self) -> Duration {
-        Duration::from_ms(self.bomb_explode_time_ms)
+    pub fn bomb_explode_time(&self) -> GameTimeDiff {
+        GameTimeDiff::from_ms(self.bomb_explode_time_ms)
     }
-    pub fn wood_burn_time(&self) -> Duration {
-        Duration::from_ms(self.wood_burn_time_ms)
+    pub fn wood_burn_time(&self) -> GameTimeDiff {
+        GameTimeDiff::from_ms(self.wood_burn_time_ms)
     }
-    pub fn fire_burn_time(&self) -> Duration {
-        Duration::from_ms(self.fire_burn_time_ms)
+    pub fn fire_burn_time(&self) -> GameTimeDiff {
+        GameTimeDiff::from_ms(self.fire_burn_time_ms)
     }
 }
 #[cfg(test)]
