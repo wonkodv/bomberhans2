@@ -3,7 +3,7 @@ use core::fmt;
 use serde::Deserialize;
 use serde::Serialize;
 
-pub fn random(time: TimeStamp, r1: i32, r2: i32) -> u32 {
+pub fn random(time: GameTime, r1: i32, r2: i32) -> u32 {
     // TODO:  test / improve randomness
     let mut x: u32 = 42;
     for i in [time.ticks_from_start(), r1 as u32, r2 as u32] {
@@ -34,11 +34,11 @@ pub const TIME_PER_TICK: std::time::Duration = std::time::Duration::from_millis(
 
 /// A Time Stamp (not a duration)
 #[derive(Default, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct TimeStamp {
+pub struct GameTime {
     inner: u32,
 }
 
-impl TimeStamp {
+impl GameTime {
     pub fn new() -> Self {
         Self { inner: 0 }
     }
@@ -47,33 +47,39 @@ impl TimeStamp {
     }
 }
 
-impl fmt::Debug for TimeStamp {
+impl fmt::Debug for GameTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "⌚{}", self.inner)
     }
 }
 
-impl std::ops::Add<Duration> for TimeStamp {
+impl std::ops::Add<GameTimeDiff> for GameTime {
     type Output = Self;
 
-    fn add(self, rhs: Duration) -> Self::Output {
-        Self { inner: self.inner + rhs.ticks }
+    fn add(self, rhs: GameTimeDiff) -> Self::Output {
+        Self {
+            inner: self.inner + rhs.ticks,
+        }
     }
 }
 
 /// A Duration
 #[derive(Copy, Clone, PartialEq, PartialOrd)]
-pub struct Duration {
+pub struct GameTimeDiff {
     ticks: u32,
 }
 
-impl Duration {
+impl GameTimeDiff {
     pub fn from_ticks(ticks: u32) -> Self {
         Self { ticks }
     }
 
     pub fn from_ms(milliseconds: u32) -> Self {
-        let ticks = if milliseconds == 0 { 0 } else { u32::max(1, (milliseconds * TICKS_PER_SECOND + 499) / 1000) };
+        let ticks = if milliseconds == 0 {
+            0
+        } else {
+            u32::max(1, (milliseconds * TICKS_PER_SECOND + 499) / 1000)
+        };
         Self { ticks }
     }
     pub fn ticks(self) -> u32 {
@@ -81,7 +87,7 @@ impl Duration {
     }
 }
 
-impl fmt::Debug for Duration {
+impl fmt::Debug for GameTimeDiff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "⏳{}", self.ticks)
     }
@@ -199,11 +205,17 @@ impl Position {
     }
 
     pub fn as_cell_pos(self) -> CellPosition {
-        CellPosition { x: self.x / Self::ACCURACY, y: self.y / Self::ACCURACY }
+        CellPosition {
+            x: self.x / Self::ACCURACY,
+            y: self.y / Self::ACCURACY,
+        }
     }
 
     pub fn from_cell_position(p: CellPosition) -> Self {
-        Self { x: p.x * Self::ACCURACY + Self::ACCURACY / 2, y: p.y * Self::ACCURACY + Self::ACCURACY / 2 }
+        Self {
+            x: p.x * Self::ACCURACY + Self::ACCURACY / 2,
+            y: p.y * Self::ACCURACY + Self::ACCURACY / 2,
+        }
     }
 
     pub fn distance_to_border(self, direction: Direction) -> i32 {
@@ -222,11 +234,11 @@ mod test {
 
     #[test]
     fn test_random() {
-        let r = random(TimeStamp::default(), 0, 0);
-        assert_eq!(r, random(TimeStamp::default(), 0, 0));
-        assert!(r != random(TimeStamp::default() + Duration::from_ticks(1), 0, 0));
-        assert!(r != random(TimeStamp::default(), 1, 0));
-        assert!(r != random(TimeStamp::default(), 0, 1));
+        let r = random(GameTime::default(), 0, 0);
+        assert_eq!(r, random(GameTime::default(), 0, 0));
+        assert!(r != random(GameTime::default() + GameTimeDiff::from_ticks(1), 0, 0));
+        assert!(r != random(GameTime::default(), 1, 0));
+        assert!(r != random(GameTime::default(), 0, 1));
     }
 
     #[test]
@@ -263,11 +275,17 @@ mod test {
 
     #[test]
     fn test_cell_to_pos() {
-        assert_eq!(Position::from_cell_position(CellPosition::new(5, 9)), Position::new(550, 950));
+        assert_eq!(
+            Position::from_cell_position(CellPosition::new(5, 9)),
+            Position::new(550, 950)
+        );
     }
 
     #[test]
     fn test_pos_to_cell() {
-        assert_eq!(Position::new(500, 999).as_cell_pos(), CellPosition::new(5, 9));
+        assert_eq!(
+            Position::new(500, 999).as_cell_pos(),
+            CellPosition::new(5, 9)
+        );
     }
 }

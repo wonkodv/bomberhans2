@@ -48,35 +48,9 @@ The verified simulation is then cloned and fed all newer user actions and the 5 
 This produces the new assumed state, which will be rendered on the next frame
 
 
+All Messages are initiated by Client and responded to by Client
+except:
+*   The server broadcasts ServerUpdate whenever receiving new information
+*   The server broadcasts at least 10 ServerUpdate per second
 
-
-### Network Protocol Flow Diagram
-
-#### Before the Game
-
-*   Client Sends every Message repeatedly until Server Acknowledges
-
-1.  Client sends Hello, Server responds with List of Lobbies and Client Cookie
-2.  Client Creates / Joins a Lobby
-3.  Client requests Lobby State once per second, Server responds
-4.  Host (Client that opened the lobby) can change Settings
-5.  Each Guest can set self as ready
-6.  When all Guests ready, Host starts the Game, Server send GameStart to all clients
-7.  Clients polling State of Lobby are send GameStart until they stop asking
-
-#### Game
-
-*   Server Maintains the current Simulation which is the single source of truth
-*   Server Maintains a list of all events that happend
-*   Server receives incoming events:
-    *   Discard, if `last_update_time` is older than recorded
-    *   Update client's last_update_time
-    *   Add player's actions to queue
-*   Server updates 60 times per second:
-    1.  updates the simulation
-    2.  Check player's reported actions
-        1.  if action started at current time OR IN THE PAST
-            1.  Set player state in Simulation
-            2.  Add `(player, action, CURRENT_TIME)` to list of all actions
-        2.  for each client, send all updates that client has not acknowledged yet
 

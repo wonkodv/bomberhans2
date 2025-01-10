@@ -4,7 +4,7 @@ use std::time::Instant;
 use app::controller;
 
 mod app;
-mod connection;
+mod communication;
 mod game;
 mod gui;
 mod multiplayer;
