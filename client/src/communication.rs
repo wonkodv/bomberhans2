@@ -164,7 +164,7 @@ fn message_timeout(message: &ClientMessage) -> Duration {
         ClientMessage::LobbyReady(_) => 100,
         ClientMessage::GameStart(_) => 16,
         ClientMessage::GameUpdate(_) => 16,
-        ClientMessage::Bye(_) => 0,
+        ClientMessage::Bye => 0,
         ClientMessage::Ping => 100,
     };
     Duration::from_millis(ms)
@@ -183,9 +183,6 @@ struct ConnectionBackend {
 
     /// Socket to send to server with
     socket: UdpSocket,
-
-    /// Client's id
-    client_id: Option<ClientId>,
 
     /// Number of the packet we most recently sent
     last_sent_packet: PacketNumber,

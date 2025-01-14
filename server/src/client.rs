@@ -32,3 +32,24 @@ impl Client {
         
     }
 }
+
+
+
+impl crate::actor::Actor<Request> for client {
+    async fn handle_message(&mut self, message: Message) {
+
+                    if packet.packet_number <= client.last_received_packet_number {
+                        log::warn!("ignoring out of order packet {packet:?}");
+                        return None;
+                    }
+
+                    client.last_received_packet_number = packet.packet_number;
+                    client.last_package_received = Instant::now();
+
+
+
+
+
+
+    }
+}

@@ -1,43 +1,88 @@
-use std::future::Future;
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::{
+    sync::mpsc::{channel, Sender},
+    task::JoinHandle,
+};
 
-pub enum Done {
-    NotDone,
-    Done,
+enum Instruction<M> {
+    Instruction(M),
+    Close,
 }
 
-#[derive(Debug, Clone)]
-pub struct Manager<C: Send> {
-    tx: Sender<C>,
+#[derive(Debug)]
+pub struct Manager<M: Send> {
+    tx: Sender<Instruction<M>>,
+    join: JoinHandle<()>,
 }
 
-impl<C: Send> Manager<C> {
-    pub async fn send_message(&self, message: C) {
-        self.tx.send(message).await.unwrap();
+impl<M: Send> Manager<M> {
+    pub async fn send(&self, message: M) {
+        self.tx
+            .send(Instruction::Instruction(message))
+            .await
+            .unwrap();
+    }
+
+    pub async fn close(self) {
+        self.tx.send(Instruction::Close).await.unwrap();
+        self.join.await;
+    }
+
+    pub fn assistant(&self) -> AssistantManager<M> {
+        AssistantManager {
+            tx: self.tx.clone(),
+        }
     }
 }
 
-pub fn actor<M,A: Actor<M>>(actor: A) -> Manager<M> {
-    let (tx, mut rx) = channel(8);
+#[derive(Debug, Clone)]
+pub struct AssistantManager<M: Send> {
+    tx: Sender<Instruction<M>>,
+}
 
-    tokio::spawn(async move {
+impl<M: Send> AssistantManager<M> {
+    pub async fn send(&self, instruction: M) {
+        self.tx
+            .send(Instruction::Instruction(instruction))
+            .await
+            .unwrap();
+    }
+}
+
+/// Start an actor.
+///
+/// Spawn a tokio task that receives instructions from a channel.
+/// return a manager, that can send instructions to that queue.
+/// manager can also close the actor, or hand out assistants. assistants can only send
+/// instructions, not close the actor.
+pub fn launch<I, A>(actor: A) -> Manager<I>
+where
+    I: Send + 'static,
+    A: Actor<I> + Send,
+{
+    let (tx, mut rx) = channel(8);
+    let mut actor = actor;
+    let join = tokio::spawn(async move {
         loop {
             match rx.recv().await {
                 None => return,
-                Some(command) => match (handle_message)(command).await {
-                    Done::NotDone => (),
-                    Done::Done => return,
-                },
+                Some(Instruction::Instruction(instruction)) => {
+                    actor.handle(instruction).await;
+                }
+                Some(Instruction::Close) => {
+                    break;
+                }
             }
         }
+        actor.close().await;
     });
 
-    Manager { tx }
+    Manager { tx, join }
 }
 
-trait Actor<M>
+pub trait Actor<M>
 where
     M: Send,
 {
-    async fn handle_message(message: M) -> Done;
+    async fn handle(&mut self, message: M);
+    async fn close(self);
 }

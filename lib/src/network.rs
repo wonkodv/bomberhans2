@@ -12,15 +12,6 @@ use crate::utils::PlayerId;
 pub const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ClientId(u32);
-
-impl ClientId {
-    pub fn new(val: u32) -> Self {
-        Self(val)
-    }
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GameId(u32);
 impl GameId {
     pub fn new(val: u32) -> Self {
@@ -48,10 +39,11 @@ pub struct ServerLobbyList {
     pub lobbies: Vec<(GameId, String)>,
 }
 
+/// Client joins a lobby `game_id`, calling himself `player_name`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientJoinLobby {
-    pub lobby: GameId,
-    pub player_name: String,
+    game_id: GameId,
+    player_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,8 +57,6 @@ pub struct ServerLobbyUpdate {
 /// Periodic Client to Server update
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientUpdate {
-    pub client_id: ClientId,
-
     /// Time of the most recently received server update
     pub last_server_update: GameTime,
 
@@ -98,20 +88,41 @@ pub struct Update {
     pub time: GameTime,
 }
 
+/// Client Opens a new lobby, calling himself `player_name`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientOpenLobby {
+    pub player_name: String,
+}
+
+/// Client changes the settings of a game he is in
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientLobbyUpdate {
+    pub settings: Settings,
+}
+
+/// An Update is when the player changed their current action
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Ready {
+    NotReady,
+    Ready,
+}
+
+/// Client sets his ready state in the lobby
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientLobbyReady {
+    pub ready: Ready,
+}
+
 /// A Message from Client to Server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
     GetLobbyList,
-
-    /// Open a new lobby, with Player Name
-    OpenNewLobby(String),
-    /// Join lobby, with Player Name
-    JoinLobby(GameId, String),
-    UpdateLobbySettings(ClientId, Settings),
-    LobbyReady(ClientId),
-    GameStart(ClientId),
+    OpenNewLobby(ClientOpenLobby),
+    JoinLobby(ClientJoinLobby),
+    UpdateLobbySettings(ClientLobbyUpdate),
+    LobbyReady(ClientLobbyReady),
     GameUpdate(ClientUpdate),
-    Bye(ClientId),
+    Bye,
     Ping,
 }
 
@@ -127,9 +138,8 @@ pub struct ClientPacket {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     LobbyList(ServerLobbyList),
-    LobbyJoined(ClientId, ServerLobbyUpdate),
     LobbyUpdate(ServerLobbyUpdate),
-    Update(SeqrverUpdate),
+    Update(ServerUpdate),
     Pong,
     Bye,
 }

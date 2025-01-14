@@ -140,7 +140,7 @@ impl fmt::Debug for Action {
 pub struct GameState {
     pub time: GameTime,
     pub field: Field,
-    pub players: BTreeMap<PlayerId, (Player, PlayerState)>,
+    pub players: BTreeMap<PlayerId, (Player, PlayerState)>, // TODO: turn this into Vec
     pub settings: Settings,
 }
 
