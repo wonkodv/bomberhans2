@@ -11,6 +11,10 @@ use crate::utils::PlayerId;
 
 pub const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
 
+/// The Maximum number of Bytes we send in 1 packet
+/// TODO: good value:?
+pub const MTU: usize = 1024;
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GameId(u32);
 impl GameId {
@@ -42,13 +46,20 @@ pub struct ServerLobbyList {
 /// Client joins a lobby `game_id`, calling himself `player_name`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientJoinLobby {
-    game_id: GameId,
-    player_name: String,
+    pub game_id: GameId,
+    pub player_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerLobbyUpdate {
-    pub id: GameId,
+    pub settings: Settings,
+    pub players: Vec<Player>,
+    pub players_ready: Vec<Ready>,
+    pub client_player_id: PlayerId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerGameStart {
     pub settings: Settings,
     pub players: Vec<Player>,
     pub client_player_id: PlayerId,
@@ -139,6 +150,7 @@ pub struct ClientPacket {
 pub enum ServerMessage {
     LobbyList(ServerLobbyList),
     LobbyUpdate(ServerLobbyUpdate),
+    GameStart(ServerGameStart),
     Update(ServerUpdate),
     Pong,
     Bye,
@@ -159,7 +171,7 @@ where
     S: std::fmt::Debug,
 {
     let result = postcard::to_allocvec(value).expect("can serialize anything");
-    debug_assert!(result.len() < 1000, "Message too large {value:?}");
+    debug_assert!(result.len() < MTU, "Message too large {value:?}");
     result
 }
 

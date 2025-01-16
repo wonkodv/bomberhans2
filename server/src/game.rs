@@ -8,6 +8,7 @@ use bomberhans_lib::utils::PlayerId;
 use bomberhans_lib::utils::*;
 
 use crate::actor::Actor;
+use crate::Request;
 
 #[derive(Debug)]
 struct Client {
@@ -29,7 +30,7 @@ struct Client {
 
 #[derive(Debug)]
 pub enum Message {
-    ClientRequest(Box<ClientPacket>, SocketAddr),
+    ClientRequest(Request),
 }
 
 #[derive(Debug)]
@@ -63,30 +64,36 @@ impl Game {
         }
     }
 
-    fn handle_client_request(&self, packet: Box<ClientPacket>, client_address: SocketAddr) -> ! {
-        match packet.as_ref()   {
-// 
-//            None => {
-//                let host_client = Client {
-//                    name: name,
-//                    address: host_address,
-//                    player_id: PlayerId(0),
-//                    last_acknowledge_time: GameTime::new(),
-//                    last_package_received: Instant::now(),
-//                };
-//                clients.insert(host_address, host_client);
-//            }
-// 
-        }    ;
+    fn handle_client_request(&self, request: Request) -> ! {
+        match &request.packet.message {
+            ClientMessage::GetLobbyList => todo!(),
+            ClientMessage::OpenNewLobby(_) => todo!(),
+            ClientMessage::JoinLobby(_) => todo!(),
+            ClientMessage::UpdateLobbySettings(_) => todo!(),
+            ClientMessage::LobbyReady(_) => todo!(),
+            ClientMessage::GameUpdate(_) | ClientMessage::Bye | ClientMessage::Ping => {
+                unreachable!("Handled by server")
+            }
+        }
+        //
+        //            None => {
+        //                let host_client = Client {
+        //                    name: name,
+        //                    address: host_address,
+        //                    player_id: PlayerId(0),
+        //                    last_acknowledge_time: GameTime::new(),
+        //                    last_package_received: Instant::now(),
+        //                };
+        //                clients.insert(host_address, host_client);
+        //            }
+        //
     }
 }
 
 impl Actor<Message> for Game {
     async fn handle(&mut self, message: Message) {
         match message {
-            Message::ClientRequest(packet, client_address) => {
-                self.handle_client_request(packet, client_address)
-            }
+            Message::ClientRequest(request) => self.handle_client_request(request),
         }
     }
 

@@ -94,11 +94,17 @@ impl fmt::Debug for GameTimeDiff {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct PlayerId(pub usize);
+pub struct PlayerId(pub u32);
 
 impl fmt::Debug for PlayerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Player{}", self.0)
+    }
+}
+
+impl Idx for PlayerId {
+    fn idx(self) -> usize {
+        self.0.try_into().unwrap()
     }
 }
 

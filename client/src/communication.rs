@@ -38,23 +38,16 @@ pub fn connect(server: SocketAddr) -> Connection {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ServerInfo {
-    pub server_name: String,
-    pub lobbies: Vec<(GameId, String)>,
-}
-
 #[derive(Debug)]
 pub enum Event {
     /// Server sent List of games
-    GameListUpdated(ServerInfo),
+    GameListUpdated(ServerLobbyList),
 
     /// Server sent Lobby Settings
-    LobbyUpdated {
-        settings: Settings,
-        players: Vec<Player>,
-        local_player_id: PlayerId,
-    },
+    LobbyUpdated(ServerLobbyUpdate),
+
+    /// Server sent Lobby Settings
+    GameStart(ServerGameStart),
 
     /// Server sent Game Update
     Update(ServerUpdate),
@@ -80,8 +73,8 @@ enum Command {
     /// Update the Settings of the Lobby we host
     UpdateSettings(Settings),
 
-    /// Start the Game of the current Lobby
-    Start,
+    /// Set player to ready
+    SetReady(Ready),
 
     /// Set local Players action
     SetAction(GameTime, Action),
@@ -112,46 +105,35 @@ impl Connection {
             .expect("comm backend doesn't panic")
     }
 
-    pub async fn open_new_lobby(&self, player_name: String) {
+    async fn send(&self, command: Command) {
         self.commands_to_backend
-            .send(Command::OpenLobby(player_name))
+            .send(command)
             .await
             .expect("comm backend doesn't panic");
+    }
+
+    pub async fn open_new_lobby(&self, player_name: String) {
+        self.send(Command::OpenLobby(player_name)).await;
     }
 
     pub async fn disconnect(&self) {
-        self.commands_to_backend
-            .send(Command::Leave)
-            .await
-            .expect("comm backend doesn't panic");
+        self.send(Command::Leave).await;
     }
 
     pub async fn update_settings(&self, settings: Settings) {
-        self.commands_to_backend
-            .send(Command::UpdateSettings(settings))
-            .await
-            .expect("comm backend doesn't panic");
+        self.send(Command::UpdateSettings(settings)).await;
     }
 
-    pub async fn start(&self) {
-        self.commands_to_backend
-            .send(Command::Start)
-            .await
-            .expect("comm backend doesn't panic");
+    pub async fn set_ready(&self, ready: Ready) {
+        self.send(Command::SetReady(ready)).await;
     }
 
     pub async fn set_action(&self, time: GameTime, action: Action) {
-        self.commands_to_backend
-            .send(Command::SetAction(time, action))
-            .await
-            .expect("comm backend doesn't panic");
+        self.send(Command::SetAction(time, action)).await;
     }
 
     pub async fn join_lobby(&self, game_id: GameId, player_name: String) {
-        self.commands_to_backend
-            .send(Command::JoinLobby(game_id, player_name))
-            .await
-            .expect("comm backend doesn't panic");
+        self.send(Command::JoinLobby(game_id, player_name)).await;
     }
 }
 
@@ -159,10 +141,9 @@ fn message_timeout(message: &ClientMessage) -> Duration {
     let ms = match message {
         ClientMessage::GetLobbyList => 100,
         ClientMessage::OpenNewLobby(_) => 100,
-        ClientMessage::JoinLobby(_, _) => 100,
-        ClientMessage::UpdateLobbySettings(_, _) => 100,
+        ClientMessage::JoinLobby(_) => 100,
+        ClientMessage::UpdateLobbySettings(_) => 100,
         ClientMessage::LobbyReady(_) => 100,
-        ClientMessage::GameStart(_) => 16,
         ClientMessage::GameUpdate(_) => 16,
         ClientMessage::Bye => 0,
         ClientMessage::Ping => 100,
@@ -216,10 +197,7 @@ impl ConnectionBackend {
         let socket = UdpSocket::bind(addr)
             .await
             .expect("can bind local udp socket");
-        socket
-            .connect(server)
-            .await
-            .expect("can set socket's remote address");
+        socket.connect(server).await.unwrap();
         ConnectionBackend {
             server,
             commands_from_frontend,
@@ -230,7 +208,6 @@ impl ConnectionBackend {
             last_sent_packet: PacketNumber::new(),
             last_received_packet: PacketNumber::new(),
             unacknowledged_packet: None,
-            client_id: None,
             last_server_update: GameTime::new(),
         }
     }
@@ -257,7 +234,7 @@ impl ConnectionBackend {
         let (packet, _, timeout) = self
             .unacknowledged_packet
             .take()
-            .expect("a packet timed out");
+            .expect("if we reach timeout, there should be something that timed out");
         let now = Instant::now();
         self.unacknowledged_packet = Some((packet.clone(), now, timeout));
         self.socket.send(&encode(&packet)).await.unwrap();
@@ -323,27 +300,29 @@ impl ConnectionBackend {
             Command::Leave => {
                 self.leave().await;
             }
-            Command::JoinLobby(lobby_id, player_name) => {
-                self.send_message(ClientMessage::JoinLobby(lobby_id, player_name))
-                    .await;
+            Command::JoinLobby(game_id, player_name) => {
+                self.send_message(ClientMessage::JoinLobby(ClientJoinLobby {
+                    game_id,
+                    player_name,
+                }))
+                .await;
             }
             Command::OpenLobby(player_name) => {
-                self.send_message(ClientMessage::OpenNewLobby(player_name))
+                self.send_message(ClientMessage::OpenNewLobby(ClientOpenLobby { player_name }))
                     .await;
             }
             Command::UpdateSettings(settings) => {
-                let client_id = self.client_id.expect("We have a client_id by now");
-                self.send_message(ClientMessage::UpdateLobbySettings(client_id, settings))
+                self.send_message(ClientMessage::UpdateLobbySettings(ClientLobbyUpdate {
+                    settings,
+                }))
+                .await;
+            }
+            Command::SetReady(ready) => {
+                self.send_message(ClientMessage::LobbyReady(ClientLobbyReady { ready }))
                     .await;
             }
-            Command::Start => {
-                let client_id = self.client_id.expect("We have a client_id by now");
-                self.send_message(ClientMessage::GameStart(client_id)).await;
-            }
             Command::SetAction(time, action) => {
-                let client_id = self.client_id.expect("We have a client_id by now");
                 self.send_message(ClientMessage::GameUpdate(ClientUpdate {
-                    client_id,
                     last_server_update: self.last_server_update,
                     current_player_action: action,
                     current_action_start_time: time,
@@ -380,38 +359,22 @@ impl ConnectionBackend {
         log::trace!("received {packet:?}");
 
         match packet.message {
-            ServerMessage::LobbyList(msg) => {
-                let server_info = ServerInfo {
-                    server_name: msg.server_name,
-                    lobbies: msg.lobbies,
-                };
+            ServerMessage::LobbyList(lobby_list) => {
                 log::info!(
                     "Received Server List from {} \"{}\", Lobbies: {}",
                     &self.server,
-                    &server_info.server_name,
-                    server_info.lobbies.len()
+                    &lobby_list.server_name,
+                    lobby_list.lobbies.len()
                 );
-                self.send_event(Event::GameListUpdated(server_info)).await;
+                self.send_event(Event::GameListUpdated(lobby_list)).await;
             }
 
-            ServerMessage::LobbyJoined(client_id, lobby_update) => {
-                self.client_id = Some(client_id);
-                self.send_event(Event::LobbyUpdated {
-                    settings: lobby_update.settings,
-                    players: lobby_update.players,
-                    local_player_id: lobby_update.client_player_id,
-                })
-                .await;
-            }
             ServerMessage::LobbyUpdate(lobby_update) => {
-                self.send_event(Event::LobbyUpdated {
-                    settings: lobby_update.settings,
-                    players: lobby_update.players,
-                    local_player_id: lobby_update.client_player_id,
-                })
-                .await;
+                self.send_event(Event::LobbyUpdated(lobby_update)).await;
             }
-
+            ServerMessage::GameStart(game_start) => {
+                self.send_event(Event::GameStart(game_start)).await;
+            }
             ServerMessage::Update(update) => {
                 self.last_server_update = update.time;
                 self.send_event(Event::Update(update)).await;
@@ -425,12 +388,9 @@ impl ConnectionBackend {
     /// this connection can be used to join again or it can be dropped
     /// to not communicate with server again
     async fn leave(&mut self) {
-        if let Some(client_id) = self.client_id {
-            self.send_message(ClientMessage::Bye(client_id)).await;
-            sleep(Duration::from_millis(10)).await;
-            self.send_message(ClientMessage::Bye(client_id)).await;
-        }
-        self.client_id = None;
+        self.send_message(ClientMessage::Bye).await;
+        sleep(Duration::from_millis(10)).await;
+        self.send_message(ClientMessage::Bye).await;
         self.unacknowledged_packet = None;
     }
 }

@@ -1,7 +1,7 @@
 use bomberhans_lib::field::Field;
 use bomberhans_lib::game_state::{Action, GameState, Player};
 use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::{GameTime, PlayerId, Position, TIME_PER_TICK};
+use bomberhans_lib::utils::{GameTime, Idx as _, PlayerId, Position, TIME_PER_TICK};
 use std::collections::VecDeque;
 use std::time;
 
@@ -34,7 +34,7 @@ impl SinglePlayerGame {
         let players: Vec<Player> = (0..(settings.players as usize))
             .map(|id| Player {
                 name: {
-                    if id == local_player.0 {
+                    if id == local_player.idx() {
                         format!("Player {id}")
                     } else {
                         "Local Player".into()

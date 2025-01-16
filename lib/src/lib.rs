@@ -1,3 +1,16 @@
+#![cfg_attr(
+    debug_assertions,
+    allow(
+        dead_code,
+        unused_variables,
+        unused_mut,
+        unused_assignments,
+        unused_imports,
+        unused_macros,
+        unused_extern_crates,
+        missing_docs,
+    )
+)]
 pub mod field;
 pub mod game_state;
 pub mod network;

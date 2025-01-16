@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use tokio::{
     sync::mpsc::{channel, Sender},
     task::JoinHandle,
@@ -24,7 +26,7 @@ impl<M: Send> Manager<M> {
 
     pub async fn close(self) {
         self.tx.send(Instruction::Close).await.unwrap();
-        self.join.await;
+        self.join.await.expect("can wait on actor task");
     }
 
     pub fn assistant(&self) -> AssistantManager<M> {
@@ -57,7 +59,7 @@ impl<M: Send> AssistantManager<M> {
 pub fn launch<I, A>(actor: A) -> Manager<I>
 where
     I: Send + 'static,
-    A: Actor<I> + Send,
+    A: Actor<I> + Send + 'static,
 {
     let (tx, mut rx) = channel(8);
     let mut actor = actor;
@@ -83,6 +85,6 @@ pub trait Actor<M>
 where
     M: Send,
 {
-    async fn handle(&mut self, message: M);
-    async fn close(self);
+    fn handle(&mut self, message: M) -> impl Future<Output = ()> + Send;
+    fn close(self) -> impl std::future::Future<Output = ()> + Send;
 }

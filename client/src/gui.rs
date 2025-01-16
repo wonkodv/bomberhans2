@@ -4,6 +4,9 @@ use std::rc::Rc;
 
 use bomberhans_lib::game_state::GameState;
 use bomberhans_lib::game_state::Player;
+use bomberhans_lib::network::Ready;
+use bomberhans_lib::network::ServerLobbyList;
+use bomberhans_lib::utils::Idx as _;
 use bomberhans_lib::utils::PlayerId;
 use eframe::egui;
 use egui::pos2;
@@ -17,7 +20,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::app::{GameController, State};
-use crate::communication::ServerInfo;
 use bomberhans_lib::field::Cell;
 use bomberhans_lib::game_state::Action;
 use bomberhans_lib::game_state::PlayerState;
@@ -521,7 +523,7 @@ impl MyApp {
         });
     }
 
-    fn update_multiplayer_view(&mut self, ui: &mut egui::Ui, server_info: &ServerInfo) {
+    fn update_multiplayer_view(&mut self, ui: &mut egui::Ui, server_info: &ServerLobbyList) {
         ui.heading(format!("Multiplayer Games on {}", server_info.server_name,));
         let button = ui.button("Host new Game");
         {
@@ -552,9 +554,9 @@ impl MyApp {
     fn update_multiplayer_guest(
         &mut self,
         ui: &mut egui::Ui,
-        settings: Settings,
-        players: Vec<Player>,
-        local_player_id: PlayerId,
+        settings: &Settings,
+        players: &Vec<Player>,
+        local_player_id: &PlayerId,
     ) {
         todo!()
     }
@@ -562,8 +564,9 @@ impl MyApp {
     fn update_multiplayer_host(
         &mut self,
         ui: &mut egui::Ui,
-        settings: Settings,
-        players: Vec<Player>,
+        settings: &Settings,
+        players: &Vec<Player>,
+        players_ready: &Vec<Ready>,
         local_player_id: PlayerId,
     ) {
         ui.heading(format!("Multiplayer Game {}", settings.game_name));
@@ -571,16 +574,21 @@ impl MyApp {
         if let Some(new_settings) = self.update_settings(ui, &settings, false) {
             self.game_controller.update_settings(new_settings);
         }
-
-        let button = ui.button("Start");
-        {
-            let mut memory = ui.memory();
-            if memory.focus().is_none() {
-                memory.request_focus(button.id);
+        if let Ready::NotReady = players_ready[local_player_id.idx()] {
+            let button = ui.button("Ready");
+            {
+                let mut memory = ui.memory();
+                if memory.focus().is_none() {
+                    memory.request_focus(button.id);
+                }
             }
-        }
-        if button.clicked() {
-            self.game_controller.start_multiplayer_game();
+            if button.clicked() {
+                self.game_controller.set_ready(Ready::Ready);
+            }
+        } else {
+            if ui.button("NotReady").clicked() {
+                self.game_controller.set_ready(Ready::Ready);
+            }
         }
         if ui.button("Cancel").clicked() {
             self.game_controller.disconnect();
@@ -594,7 +602,7 @@ impl eframe::App for MyApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Bomberhans");
-            match state {
+            match &state {
                 State::Initial => self.update_initial(ui),
                 State::SpSettings => {
                     //      self.app_settings.game_settings =
@@ -673,19 +681,29 @@ impl eframe::App for MyApp {
                     panic!("Controller assumes Gui closed, but we are trying to draw that")
                 }
                 State::Invalid => panic!(),
-                State::MpLobbyGuest {
+                State::MpLobby {
+                    host: false,
                     settings,
                     players,
+                    players_ready,
                     local_player_id,
                 } => {
                     self.update_multiplayer_guest(ui, settings, players, local_player_id);
                 }
-                State::MpLobbyHost {
+                State::MpLobby {
+                    host: true,
                     settings,
                     players,
+                    players_ready,
                     local_player_id,
                 } => {
-                    self.update_multiplayer_host(ui, settings, players, local_player_id);
+                    self.update_multiplayer_host(
+                        ui,
+                        settings,
+                        players,
+                        players_ready,
+                        *local_player_id,
+                    );
                 }
                 State::MpJoiningLobby { game_id } => {
                     ui.label("Joining Lobby".to_owned());
@@ -693,7 +711,7 @@ impl eframe::App for MyApp {
                         self.game_controller.disconnect();
                     }
                 }
-            }
+            };
         });
         if !frame.is_web() {
             egui::gui_zoom::zoom_with_keyboard_shortcuts(ctx, frame.info().native_pixels_per_point);

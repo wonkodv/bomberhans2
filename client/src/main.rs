@@ -1,3 +1,16 @@
+#![cfg_attr(
+    debug_assertions,
+    allow(
+        dead_code,
+        unused_variables,
+        unused_mut,
+        unused_assignments,
+        unused_imports,
+        unused_macros,
+        unused_extern_crates,
+        missing_docs,
+    )
+)]
 use std::io::Write;
 use std::time::Instant;
 
@@ -37,10 +50,8 @@ fn main() {
         game_controller_backend.run().await;
     });
 
-
     // TODO: spawn_blocking
     gui::gui(game_controller);
 }
-
 
 // TODO: coordinated shutdsown

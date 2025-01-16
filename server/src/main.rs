@@ -11,7 +11,9 @@
         missing_docs,
     )
 )]
+use actor::launch;
 use actor::Actor;
+use bomberhans_lib::network::*;
 use std::future::Future;
 use std::io::Write;
 use std::net::Ipv6Addr;
@@ -26,25 +28,54 @@ mod server;
 
 #[derive(Debug)]
 struct Request {
-    client_addr: SocketAddr,
-    data: Box<[u8]>,
+    client_address: SocketAddr,
+    packet: ClientPacket,
+}
+
+impl Request {
+    pub fn respond(&self, message: ServerMessage) -> Response {
+        Response {
+            client_addr: self.client_address,
+            message,
+            ack: Some(self.packet.packet_number),
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Response {
     client_addr: SocketAddr,
-    data: Box<[u8]>,
+    message: ServerMessage,
+    ack: Option<PacketNumber>,
 }
 
 #[derive(Debug)]
 struct Responder<'s> {
     socket: &'s UdpSocket,
+    packet_number: PacketNumber,
+}
+impl<'s> Responder<'s> {
+    fn new(socket: &'s UdpSocket) -> Self {
+        Self {
+            socket,
+            packet_number: PacketNumber::new(),
+        }
+    }
 }
 
 impl<'s> Actor<Response> for Responder<'s> {
     async fn handle(&mut self, response: Response) {
+        let packet = ServerPacket {
+            magic: BOMBERHANS_MAGIC_NO_V1,
+            packet_number: self.packet_number.next(),
+            ack_packet_number: response.ack,
+            message: response.message,
+        };
+        let data = encode(&packet);
         self.socket
-            .send_to(response.data.as_ref(), response.client_addr);
+            .send_to(&data, response.client_addr)
+            .await
+            .expect("can send bytes");
     }
 
     async fn close(self) {
@@ -69,27 +100,42 @@ async fn main() {
     log::info!("Running Bomberhans Server {}", bomberhans_lib::VERSION);
 
     let addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 4267); // TODO: make port / ip configurable
-    let socket = tokio::net::UdpSocket::bind(addr);
+    let socket = tokio::net::UdpSocket::bind(addr)
+        .await
+        .expect("can bind socket");
+    let socket = Box::leak(Box::new(socket));
     log::info!("Listening on {addr}");
 
-    let responder_manager = sign_on(Responder { socket: &socket });
+    let responder_manager = launch(Responder::new(socket));
 
-    let server_manager = sign_on(server::Server::new(
+    let server_manager = launch(server::Server::new(
         "HansServer".to_string(),
-        responder_manager.assistant(),
+        responder_manager,
     ));
 
+    let mut buf = [0u8; MTU];
     loop {
-        let buf = Box::<_>::new([0u8; 1024]);
         tokio::select! {
             _ =  tokio::signal::ctrl_c() => { break }
 
-            (len, client_addr) = socket.recv(buf) => {
-                server_manager.handle_message(Request{buf,len,client_addr}).await;
-             }
+            result = socket.recv_from(&mut buf) => {
+                let (len, client_address) = result.expect("can receive");
+                if let Some(packet) = decode::<ClientPacket>(&buf[0..len]) {
+                    if packet.magic == BOMBERHANS_MAGIC_NO_V1 {
+                        server_manager.send(server::Message::Request(Request{packet, client_address})).await;
+                    } else {
+                        log::warn!("ignoring unknown protocol {client_address}  {packet:?}");
+                    }
+
+
+                }else {
+                    log::warn!("ignoring unparsable data from {client_address:?}");
+
+                };
+            }
 
         };
     }
 
-    server_manager.close(); // close all games, sending nice disconnect messages to all clients.
+    server_manager.close().await; // close all games, sending nice disconnect messages to all clients.
 }
