@@ -268,6 +268,7 @@ impl GameControllerBackend {
             //               State::Disconnected(format!("server kicked us? "))
             //           }
             (_, State::Disconnected(msg)) => State::Disconnected(msg),
+            (communication::Event::Disconnect(reason), _) => State::Disconnected(reason),
             (communication::Event::Ping(ping), state) => {
                 self.ping = Some(ping);
                 state

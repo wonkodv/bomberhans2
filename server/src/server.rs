@@ -61,7 +61,7 @@ impl Server {
                     .collect();
 
                 self.responder
-                    .send(request.respond(ServerMessage::LobbyList(ServerLobbyList {
+                    .send(request.response(ServerMessage::LobbyList(ServerLobbyList {
                         server_name,
                         lobbies,
                     })))
@@ -70,7 +70,7 @@ impl Server {
             }
             ClientMessage::Ping => {
                 self.responder
-                    .send(request.respond(ServerMessage::Pong))
+                    .send(request.response(ServerMessage::Pong))
                     .await;
                 return;
             }
@@ -81,20 +81,24 @@ impl Server {
             }
 
             ClientMessage::OpenNewLobby(message) => {
-                let game_actor = game::Game::new(*client_address);
-                let manager = launch(game_actor);
-                let game = Game {
-                    name: "Untitled Game".to_owned(),
-                    started: false,
-                    manager,
-                };
+                if let Some(client_game) = self.client_games.get(client_address) {
+                    //already in game, our answer was lost
+                } else {
+                    let game_actor = game::Game::new(*client_address, self.responder.assistant());
+                    let manager = launch(game_actor);
+                    let game = Game {
+                        name: "Untitled Game".to_owned(),
+                        started: false,
+                        manager,
+                    };
 
-                let id = GameId::new(rand::random());
+                    let id = GameId::new(rand::random());
 
-                let old = self.client_games.insert(*client_address, id);
-                debug_assert!(old.is_none());
-                let old = self.games.insert(id, game);
-                debug_assert!(old.is_none());
+                    let old = self.client_games.insert(*client_address, id);
+                    debug_assert!(old.is_none());
+                    let old = self.games.insert(id, game);
+                    debug_assert!(old.is_none());
+                }
             }
             ClientMessage::JoinLobby(_) => {}
             ClientMessage::UpdateLobbySettings(_) => {}

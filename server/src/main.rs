@@ -33,7 +33,7 @@ struct Request {
 }
 
 impl Request {
-    pub fn respond(&self, message: ServerMessage) -> Response {
+    pub fn response(&self, message: ServerMessage) -> Response {
         Response {
             client_addr: self.client_address,
             message,
@@ -71,6 +71,7 @@ impl<'s> Actor<Response> for Responder<'s> {
             ack_packet_number: response.ack,
             message: response.message,
         };
+        log::trace!("Sending to {:?} packet {:?}", response.client_addr, packet);
         let data = encode(&packet);
         self.socket
             .send_to(&data, response.client_addr)
@@ -97,7 +98,11 @@ async fn main() {
             )
         })
         .init();
-    log::info!("Running Bomberhans Server {}", bomberhans_lib::VERSION);
+    log::info!(
+        "Running Bomberhans Server {}, LogLevel {}",
+        bomberhans_lib::VERSION,
+        log::max_level(),
+    );
 
     let addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 4267); // TODO: make port / ip configurable
     let socket = tokio::net::UdpSocket::bind(addr)
@@ -122,6 +127,7 @@ async fn main() {
                 let (len, client_address) = result.expect("can receive");
                 if let Some(packet) = decode::<ClientPacket>(&buf[0..len]) {
                     if packet.magic == BOMBERHANS_MAGIC_NO_V1 {
+                        log::trace!("handeling packet from {client_address}  {packet:?}");
                         server_manager.send(server::Message::Request(Request{packet, client_address})).await;
                     } else {
                         log::warn!("ignoring unknown protocol {client_address}  {packet:?}");

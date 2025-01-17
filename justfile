@@ -1,4 +1,3 @@
-
 build:
     cargo build
 
@@ -15,6 +14,6 @@ client: build
     cargo run --bin bomberhans2
 
 both: build
-    kitty bash -c "target/debug/bomberhans2-server | tee .server-log" &
-    kitty bash -c "target/debug/bomberhans2        | tee .client-log" &
-    target/debug/bomberhans2
+    kitty bash -c "RUST_LOG=trace just server | tee .server-log" &
+    # kitty bash -c "RUST_LOG=info just client | tee .client-log" &
+    RUST_LOG=trace target/debug/bomberhans2

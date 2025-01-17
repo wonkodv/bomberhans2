@@ -263,10 +263,6 @@ impl Server {
                     return None;
                 };
 
-                if msg.last_server_update < client_game.last_acknowledge_time {
-                    log::debug!("ignoring out of order/duplicate message {msg:?}");
-                    return None;
-                }
 
                 client_game.last_acknowledge_time = msg.last_server_update;
 

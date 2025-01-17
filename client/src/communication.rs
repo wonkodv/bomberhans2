@@ -60,6 +60,7 @@ pub enum Event {
 
     /// We know the Ping to the Server
     Ping(Duration),
+    Disconnect(String),
 }
 
 #[derive(Debug)]
@@ -267,7 +268,9 @@ impl ConnectionBackend {
             };
 
             tokio::select! {
-                () = async { if let Some(timeout) = timeout { sleep(timeout).await } } => { self.handle_timeout().await }
+                true = async { if let Some(timeout) = timeout { sleep(timeout).await; true } else {false} } => {
+                    self.handle_timeout().await;
+                }
                 cmd = self.commands_from_frontend.recv() => {
                     match cmd {
                         Some(cmd) => self.handle_command(cmd) .await,
@@ -340,13 +343,14 @@ impl ConnectionBackend {
     }
 
     async fn handle_message(&mut self, packet: ServerPacket) {
-        self.last_received_packet = packet.packet_number;
         self.received_packets.push((Instant::now(), packet.clone()));
+
+        log::trace!("received {packet:?}");
 
         if let Some((pending_ack_packet, sent_time, _timeout)) = self.unacknowledged_packet.as_ref()
         {
             if Some(pending_ack_packet.packet_number) == packet.ack_packet_number {
-                log::trace!("Packet acked: {:?}", pending_ack_packet.packet_number);
+                log::trace!("Acknowledges: {:?}", pending_ack_packet.packet_number);
                 self.send_event(Event::Ping(sent_time.elapsed())).await;
                 self.unacknowledged_packet = None;
             }
@@ -356,7 +360,8 @@ impl ConnectionBackend {
             log::trace!("ignoring out of order packet {packet:?}");
             return;
         }
-        log::trace!("received {packet:?}");
+
+        self.last_received_packet = packet.packet_number;
 
         match packet.message {
             ServerMessage::LobbyList(lobby_list) => {
@@ -380,7 +385,10 @@ impl ConnectionBackend {
                 self.send_event(Event::Update(update)).await;
             }
             ServerMessage::Pong => todo!(),
-            ServerMessage::Bye => todo!(),
+            ServerMessage::Bye(reason) => {
+                log::warn!("Server disconnected because: {reason:?}");
+                self.send_event(Event::Disconnect(reason)).await;
+            }
         };
     }
 

@@ -30,9 +30,8 @@ impl PacketNumber {
         Self(NonZeroU32::new(1).unwrap())
     }
     pub fn next(&mut self) -> Self {
-        let p = self.0;
-        self.0 = p.checked_add(1).expect("packet_number fits 32bit");
-        return Self(p);
+        self.0 = self.0.checked_add(1).expect("packet_number fits 32bit");
+        return Self(self.0);
     }
 }
 
@@ -112,10 +111,19 @@ pub struct ClientLobbyUpdate {
 }
 
 /// An Update is when the player changed their current action
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Ready {
     NotReady,
     Ready,
+}
+
+impl Ready {
+    pub fn is_ready(&self) -> bool {
+        match self {
+            Ready::NotReady => false,
+            Ready::Ready => true,
+        }
+    }
 }
 
 /// Client sets his ready state in the lobby
@@ -152,8 +160,9 @@ pub enum ServerMessage {
     LobbyUpdate(ServerLobbyUpdate),
     GameStart(ServerGameStart),
     Update(ServerUpdate),
+    /// Disconnect client, and a reason why
+    Bye(String),
     Pong,
-    Bye,
 }
 
 /// A Client Packet wrapping a Server Message

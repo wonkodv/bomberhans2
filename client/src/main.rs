@@ -40,7 +40,11 @@ fn main() {
             )
         })
         .init();
-    log::info!("Running Bomberhans Client {}", bomberhans_lib::VERSION);
+    log::info!(
+        "Running Bomberhans Client {}, LogLevel {}",
+        bomberhans_lib::VERSION,
+        log::max_level()
+    );
 
     let (game_controller, mut game_controller_backend) = controller();
 
