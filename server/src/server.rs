@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use bomberhans_lib::network::*;
+use tokio::task::JoinHandle;
 
 use crate::actor::launch;
 use crate::actor::Actor;
@@ -21,7 +23,6 @@ pub enum Message {
 #[derive(Debug)]
 struct Game {
     name: String,
-    game_id: GameId,
     started: bool,
     manager: Manager<game::Message>,
 }
@@ -32,8 +33,7 @@ pub struct Server {
     games: HashMap<GameId, Game>,
     client_games: HashMap<SocketAddr, GameId>,
     responder: Manager<Response>,
-    server: AssistantManager<Message>, // server-actor holds his own managers assistant to
-                                       // pass it to games.
+    server: AssistantManager<Message>,
 }
 
 impl Server {
@@ -108,13 +108,13 @@ impl Server {
                     // create new Game and new Client
                     let game_id = GameId::new(rand::random());
                     let game_actor = game::Game::new(
+                        game_id,
                         *client_address,
                         self.responder.assistant(),
                         self.server.assistant(),
                     );
                     let manager = launch(|tx| game_actor);
                     let game = Game {
-                        game_id,
                         name: "Untitled Game".to_owned(),
                         started: false,
                         manager,

@@ -89,6 +89,7 @@ impl State {
 
 #[derive(Debug)]
 pub struct Game {
+    game_id: GameId,
     state: State,
     host: SocketAddr,
     clients: HashMap<SocketAddr, Client>,
@@ -98,6 +99,7 @@ pub struct Game {
 
 impl Game {
     pub fn new(
+        game_id: GameId,
         host_address: SocketAddr,
         responder: AssistantManager<Response>,
         server: AssistantManager<server::Message>,
@@ -109,6 +111,7 @@ impl Game {
             players_ready: Vec::new(),
         };
         Self {
+            game_id,
             state: State::Lobby(lobby),
             host: host_address,
             clients,
@@ -118,12 +121,16 @@ impl Game {
     }
 
     async fn handle_client_request(&mut self, request: Request) {
+        let game_id = self.game_id;
+        log::trace!("{game_id:?}: Handling {request:?}");
         let client_address = request.client_address;
         match &request.packet.message {
             ClientMessage::OpenNewLobby(ClientOpenLobby { player_name })
             | ClientMessage::JoinLobby(ClientJoinLobby { player_name, .. }) => {
                 let State::Lobby(lobby) = &mut self.state else {
-                    log::warn!("rejecting join from {client_address} for started game");
+                    log::warn!(
+                        "{game_id:?}: rejecting join from {client_address} for started game"
+                    );
                     self.responder
                         .send(request.response(ServerMessage::Bye("Game Started".to_owned())))
                         .await;
@@ -131,7 +138,7 @@ impl Game {
                 };
 
                 if self.clients.len() as u32 == lobby.settings.players {
-                    log::warn!("rejecting join from {client_address} for full game");
+                    log::warn!("{game_id:?}: rejecting join from {client_address} for full game");
                     self.responder
                         .send(request.response(ServerMessage::Bye("Game Full".to_owned())))
                         .await;
@@ -195,12 +202,14 @@ impl Game {
                             .await;
                         return;
                     } else {
-                        log::info!("All players ready, starting Game");
+                        log::info!("{game_id:?}: All players ready, starting Game");
 
                         self.state.start();
                     }
                 } else {
-                    log::info!("Client set ready for started game, sending GameStart again");
+                    log::info!(
+                        "{game_id:?}: Client set ready for started game, sending GameStart again"
+                    );
                     // Game Started message was lost
                 }
 
@@ -230,7 +239,7 @@ impl Game {
                     .expect("server would not send a message to a game that client hadn't joined");
 
                 if msg.last_server_update < client.last_acknowledge_time {
-                    log::debug!("Client ACK'd Game Time odler than the one in a previous (by packetnumber) packet");
+                    log::debug!("{game_id:?}: Client ACK'd Game Time odler than the one in a previous (by packetnumber) packet");
                     self.responder
                         .send(
                             request.response(ServerMessage::Bye(
@@ -244,7 +253,7 @@ impl Game {
                 client.last_acknowledge_time = msg.last_server_update;
 
                 let State::Started(game) = &mut self.state else {
-                    log::warn!("Ignoring Client Game update for Lobby {msg:?}");
+                    log::warn!("{game_id:?}: Ignoring Client Game update for Lobby {msg:?}");
                     return;
                 };
 
@@ -256,6 +265,7 @@ impl Game {
             }
 
             ClientMessage::Bye => {
+                log::warn!("{game_id:?}: Disconnecting {client_address:?}");
                 let client = self
                     .clients
                     .remove(&client_address)
