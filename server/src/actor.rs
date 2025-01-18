@@ -24,9 +24,18 @@ impl<M: Send> Manager<M> {
             .unwrap();
     }
 
-    pub async fn close(self) {
-        self.tx.send(Instruction::Close).await.unwrap();
+    pub async fn close(&self) {
+        // try to send a close. if we can't, its because actor already closed
+        let _ = self.tx.send(Instruction::Close).await;
+    }
+
+    pub async fn join(self) {
         self.join.await.expect("can wait on actor task");
+    }
+
+    pub async fn close_and_join(self) {
+        self.close().await;
+        self.join().await;
     }
 
     pub fn assistant(&self) -> AssistantManager<M> {
@@ -36,7 +45,7 @@ impl<M: Send> Manager<M> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AssistantManager<M: Send> {
     tx: Sender<Instruction<M>>,
 }
@@ -46,7 +55,12 @@ impl<M: Send> AssistantManager<M> {
         self.tx
             .send(Instruction::Instruction(instruction))
             .await
-            .unwrap();
+            .expect("actor hasn't paniced {self:?}");
+    }
+    pub fn assistant(&self) -> AssistantManager<M> {
+        AssistantManager {
+            tx: self.tx.clone(),
+        }
     }
 }
 
@@ -56,13 +70,14 @@ impl<M: Send> AssistantManager<M> {
 /// return a manager, that can send instructions to that queue.
 /// manager can also close the actor, or hand out assistants. assistants can only send
 /// instructions, not close the actor.
-pub fn launch<I, A>(actor: A) -> Manager<I>
+pub fn launch<I, F, A>(actor: F) -> Manager<I>
 where
     I: Send + 'static,
     A: Actor<I> + Send + 'static,
+    F: FnOnce(AssistantManager<I>) -> A,
 {
     let (tx, mut rx) = channel(8);
-    let mut actor = actor;
+    let mut actor = actor(AssistantManager { tx: tx.clone() });
     let join = tokio::spawn(async move {
         loop {
             match rx.recv().await {

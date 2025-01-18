@@ -238,7 +238,7 @@ impl ConnectionBackend {
             .expect("if we reach timeout, there should be something that timed out");
         let now = Instant::now();
         self.unacknowledged_packet = Some((packet.clone(), now, timeout));
-        self.socket.send(&encode(&packet)).await.unwrap();
+        let _ = self.socket.send(&encode(&packet)).await; // TODO: do soemthing if we can not send
     }
 
     fn decode_message(&mut self, data: &[u8]) -> Option<ServerPacket> {

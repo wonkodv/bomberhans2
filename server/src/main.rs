@@ -111,12 +111,15 @@ async fn main() {
     let socket = Box::leak(Box::new(socket));
     log::info!("Listening on {addr}");
 
-    let responder_manager = launch(Responder::new(socket));
+    let responder_manager = launch(|a| Responder::new(socket));
 
-    let server_manager = launch(server::Server::new(
-        "HansServer".to_string(),
-        responder_manager,
-    ));
+    let server_manager = launch(|server_manager_assistant| {
+        server::Server::new(
+            "HansServer".to_string(),
+            responder_manager,
+            server_manager_assistant,
+        )
+    });
 
     let mut buf = [0u8; MTU];
     loop {
@@ -143,5 +146,5 @@ async fn main() {
         };
     }
 
-    server_manager.close().await; // close all games, sending nice disconnect messages to all clients.
+    server_manager.close_and_join().await; // close all games, sending nice disconnect messages to all clients.
 }

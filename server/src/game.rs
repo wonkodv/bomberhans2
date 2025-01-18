@@ -12,6 +12,7 @@ use bomberhans_lib::utils::*;
 
 use crate::actor::Actor;
 use crate::actor::AssistantManager;
+use crate::server;
 use crate::Request;
 use crate::Response;
 
@@ -47,7 +48,7 @@ struct StartedGame {
 struct Lobby {
     settings: Settings,
     players: Vec<Player>,
-    player_ready: Vec<Ready>,
+    players_ready: Vec<Ready>,
 }
 
 #[derive(Debug)]
@@ -72,6 +73,18 @@ impl State {
             }
         }
     }
+
+    fn remove_player(&mut self, player_id: PlayerId) {
+        match self {
+            State::Lobby(lobby) => {
+                lobby.players.remove(player_id.idx());
+                lobby.players_ready.remove(player_id.idx());
+            }
+            State::Started(game) => {
+                game.game_state.players.remove(&player_id).unwrap();
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -80,28 +93,33 @@ pub struct Game {
     host: SocketAddr,
     clients: HashMap<SocketAddr, Client>,
     responder: AssistantManager<Response>,
+    server: AssistantManager<server::Message>,
 }
 
 impl Game {
-    pub fn new(host_address: SocketAddr, responder: AssistantManager<Response>) -> Self {
+    pub fn new(
+        host_address: SocketAddr,
+        responder: AssistantManager<Response>,
+        server: AssistantManager<server::Message>,
+    ) -> Self {
         let clients = HashMap::new();
         let lobby = Lobby {
             settings: Settings::default(),
             players: Vec::new(),
-            player_ready: Vec::new(),
+            players_ready: Vec::new(),
         };
         Self {
             state: State::Lobby(lobby),
             host: host_address,
             clients,
             responder,
+            server,
         }
     }
 
     async fn handle_client_request(&mut self, request: Request) {
         let client_address = request.client_address;
         match &request.packet.message {
-            ClientMessage::GetLobbyList => todo!(),
             ClientMessage::OpenNewLobby(ClientOpenLobby { player_name })
             | ClientMessage::JoinLobby(ClientJoinLobby { player_name, .. }) => {
                 let State::Lobby(lobby) = &mut self.state else {
@@ -142,7 +160,7 @@ impl Game {
                         start_position,
                     };
                     lobby.players.push(player);
-                    lobby.player_ready.push(Ready::NotReady);
+                    lobby.players_ready.push(Ready::NotReady);
 
                     player_id
                 };
@@ -151,7 +169,7 @@ impl Game {
                         request.response(ServerMessage::LobbyUpdate(ServerLobbyUpdate {
                             settings: lobby.settings.clone(),
                             players: lobby.players.clone(),
-                            players_ready: lobby.player_ready.clone(),
+                            players_ready: lobby.players_ready.clone(),
                             client_player_id: player_id,
                         })),
                     )
@@ -162,15 +180,15 @@ impl Game {
                 let client = &self.clients[&client_address];
 
                 if let State::Lobby(lobby) = &mut self.state {
-                    lobby.player_ready[client.player_id.idx()] = *ready;
+                    lobby.players_ready[client.player_id.idx()] = *ready;
 
-                    if !lobby.player_ready.iter().all(Ready::is_ready) {
+                    if !lobby.players_ready.iter().all(Ready::is_ready) {
                         self.responder
                             .send(
                                 request.response(ServerMessage::LobbyUpdate(ServerLobbyUpdate {
                                     settings: lobby.settings.clone(),
                                     players: lobby.players.clone(),
-                                    players_ready: lobby.player_ready.clone(),
+                                    players_ready: lobby.players_ready.clone(),
                                     client_player_id: client.player_id,
                                 })),
                             )
@@ -236,7 +254,23 @@ impl Game {
                     time: msg.current_action_start_time,
                 });
             }
-            ClientMessage::Bye | ClientMessage::Ping => {
+
+            ClientMessage::Bye => {
+                let client = self
+                    .clients
+                    .remove(&client_address)
+                    .expect("server would not send a message to a game that client hadn't joined");
+
+                let player_id = client.player_id;
+
+                self.state.remove_player(player_id);
+
+                self.clients
+                    .values_mut()
+                    .filter(|c| c.player_id > player_id)
+                    .for_each(|c| c.player_id = PlayerId(c.player_id.0 - 1));
+            }
+            ClientMessage::GetLobbyList | ClientMessage::Ping => {
                 unreachable!("Handled by server")
             }
         }
