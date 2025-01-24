@@ -150,7 +150,8 @@ impl Server {
                     *game_id
                 }
             }
-            ClientMessage::UpdateLobbySettings(_)
+            ClientMessage::PollLobby
+            | ClientMessage::UpdateLobbySettings(_)
             | ClientMessage::LobbyReady(_)
             | ClientMessage::GameUpdate(_) => {
                 let Some(game_id) = self.client_games.get(client_address) else {

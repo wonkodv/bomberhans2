@@ -235,6 +235,39 @@ impl Game {
                     )
                     .await;
             }
+            ClientMessage::PollLobby => {
+                let client = &self.clients[&client_address];
+                match &self.state {
+                    State::Lobby(lobby) => {
+                        self.responder
+                            .send(
+                                request.response(ServerMessage::LobbyUpdate(ServerLobbyUpdate {
+                                    settings: lobby.settings.clone(),
+                                    players: lobby.players.clone(),
+                                    players_ready: lobby.players_ready.clone(),
+                                    client_player_id: client.player_id,
+                                })),
+                            )
+                            .await;
+                    }
+                    State::Started(game) => {
+                        self.responder
+                            .send(
+                                request.response(ServerMessage::GameStart(ServerGameStart {
+                                    settings: game.game_state.settings.clone(),
+                                    players: game
+                                        .game_state
+                                        .players
+                                        .values()
+                                        .map(|(p, s)| p.clone())
+                                        .collect(),
+                                    client_player_id: client.player_id,
+                                })),
+                            )
+                            .await;
+                    }
+                };
+            }
             ClientMessage::GameUpdate(msg) => {
                 let client = self
                     .clients

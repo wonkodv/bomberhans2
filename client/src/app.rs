@@ -48,7 +48,9 @@ fn synchronize_simulation(
         local_game_state.set_player_action(local_update.player, local_update.action);
     }
     for _ in 0..5 {
-        // TODO: think about this value
+        // TODO: why 5?
+        //
+        // TODO: keep a list of local actions instead of just 1
         if local_update.time == local_game_state.time {
             local_game_state.set_player_action(local_update.player, local_update.action);
         }
@@ -232,9 +234,21 @@ impl GameControllerBackend {
 
     pub async fn run(&mut self) {
         loop {
+            let interval = match &self.state {
+                State::Initial
+                | State::MpConnecting
+                | State::MpOpeningNewLobby
+                | State::Disconnected(_)
+                | State::GuiClosed
+                | State::Invalid
+                | State::MpJoiningLobby { .. }
+                | State::SpSettings => 3600_000,
+                State::SpGame(_) | State::MpGame { .. } => 16,
+                State::MpLobby { .. } | State::MpView(_) | State::MpServerLost(_) => 1000,
+            };
             tokio::select! {
+                biased;
                 // TODO: do something smart with timeout
-                () = sleep(Duration::from_millis(10)) => { self.handle_timeout().await }
                 gui_command = self.rx_from_frontend.recv() => {
                     match gui_command {
                         Some(gui_command) => self.handle_gui_command(gui_command).await,
@@ -252,6 +266,7 @@ impl GameControllerBackend {
                 } => {
                     self.handle_server_event(server_event).await;
                 }
+                _ = tokio::time::sleep(Duration::from_millis(interval)) => { self.handle_timeout().await }
             }
         }
     }
@@ -676,9 +691,34 @@ impl GameControllerBackend {
                 self.update_gui();
                 State::SpGame(spg)
             }
-
-            state => state,
-            // state => todo!("state {:?}", &state,),
+            State::MpGame {
+                server_game_state,
+                mut local_game_state,
+                local_update,
+            } => {
+                local_game_state.simulate_1_update(); // TODO: Should be update real time ?
+                State::MpGame {
+                    server_game_state,
+                    local_game_state,
+                    local_update,
+                }
+            }
+            state @ State::MpLobby { .. } => {
+                self.connection.as_ref().unwrap().poll_lobby().await;
+                state
+            }
+            state @ State::MpView(_) => {
+                self.connection.as_ref().unwrap().poll_game_list().await;
+                state
+            }
+            state @ State::Initial => todo!(),
+            state @ State::SpSettings => todo!(),
+            state @ State::MpConnecting => todo!(),
+            state @ State::MpOpeningNewLobby => todo!(),
+            state @ State::MpServerLost(_) => todo!(),
+            state @ State::Disconnected(_) => todo!(),
+            state @ State::GuiClosed => todo!(),
+            state @ State::MpJoiningLobby { game_id } => todo!(),
         };
     }
 

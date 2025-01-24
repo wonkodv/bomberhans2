@@ -82,6 +82,10 @@ enum Command {
 
     /// Disconnect from Server
     Leave,
+
+    /// Ask Server for Lobby Update
+    PollLobby,
+    PollGameList,
     // GetState(tokio::sync::oneshot::Sender<State>),
     //
 }
@@ -136,6 +140,14 @@ impl Connection {
     pub async fn join_lobby(&self, game_id: GameId, player_name: String) {
         self.send(Command::JoinLobby(game_id, player_name)).await;
     }
+
+    pub async fn poll_lobby(&self) {
+        self.send(Command::PollLobby).await;
+    }
+
+    pub async fn poll_game_list(&self) {
+        self.send(Command::PollGameList).await;
+    }
 }
 
 fn message_timeout(message: &ClientMessage) -> Duration {
@@ -148,6 +160,7 @@ fn message_timeout(message: &ClientMessage) -> Duration {
         ClientMessage::GameUpdate(_) => 16,
         ClientMessage::Bye => 0,
         ClientMessage::Ping => 100,
+        ClientMessage::PollLobby => 500,
     };
     Duration::from_millis(ms)
 }
@@ -336,6 +349,12 @@ impl ConnectionBackend {
                     current_action_start_time: time,
                 }))
                 .await;
+            }
+            Command::PollLobby => {
+                self.send_message(ClientMessage::PollLobby).await;
+            }
+            Command::PollGameList => {
+                self.send_message(ClientMessage::GetLobbyList).await;
             }
         };
     }

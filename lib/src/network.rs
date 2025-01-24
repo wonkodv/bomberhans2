@@ -143,6 +143,7 @@ pub enum ClientMessage {
     GameUpdate(ClientUpdate),
     Bye,
     Ping,
+    PollLobby,
 }
 
 /// A Client Packet wrapping a Client Message
