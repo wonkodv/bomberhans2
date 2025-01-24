@@ -18,6 +18,7 @@ use std::future::Future;
 use std::io::Write;
 use std::net::Ipv6Addr;
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::task::JoinHandle;
@@ -122,9 +123,13 @@ async fn main() {
     });
 
     let mut buf = [0u8; MTU];
+    let mut interval = tokio::time::interval(Duration::from_millis(16));
     loop {
         tokio::select! {
             _ =  tokio::signal::ctrl_c() => { break }
+            _ =  interval.tick() => {
+                        server_manager.send(server::Message::Update).await;
+            }
 
             result = socket.recv_from(&mut buf) => {
                 let (len, client_address) = result.expect("can receive");

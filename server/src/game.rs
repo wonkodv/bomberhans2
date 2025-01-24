@@ -34,6 +34,9 @@ struct Client {
 #[derive(Debug)]
 pub enum Message {
     ClientRequest(Request),
+
+    /// time has passed
+    Update,
 }
 
 #[derive(Debug)]
@@ -289,12 +292,74 @@ impl Game {
         //            }
         //
     }
+
+    async fn handle_update(&mut self) {
+        match &mut self.state {
+            State::Started(game) => {
+                let mut updates: Vec<Update> = Vec::new();
+                std::mem::swap(&mut updates, &mut game.future_updates);
+
+                for u in updates {
+                    if u.time > game.game_state.time {
+                        game.future_updates.push(u);
+                    } else if game.game_state.set_player_action(u.player, u.action) {
+                        game.updates.push(Update {
+                            time: game.game_state.time,
+                            ..u
+                        });
+                    }
+                }
+
+                game.game_state.simulate_1_update();
+
+                for client in self.clients.values() {
+                    let message = ServerMessage::Update(ServerUpdate {
+                        time: game.game_state.time,
+                        checksum: 0, // TODO: Checksum
+                        updates: game
+                            .updates
+                            .iter()
+                            .filter(|u| u.time > client.last_acknowledge_time)
+                            .map(Update::clone)
+                            .collect(),
+                    });
+
+                    self.responder
+                        .send(Response {
+                            client_addr: client.address,
+                            message,
+                            ack: None,
+                        })
+                        .await;
+                }
+            }
+            State::Lobby(lobby) => {
+                for client in self.clients.values() {
+                    let message = ServerMessage::LobbyUpdate(ServerLobbyUpdate {
+                        client_player_id: client.player_id,
+                        settings: lobby.settings.clone(),
+                        players: lobby.players.clone(),
+                        players_ready: lobby.players_ready.clone(),
+                    });
+
+                    self.responder
+                        .send(Response {
+                            client_addr: client.address,
+                            message,
+                            ack: None,
+                        })
+                        .await;
+                }
+            }
+        }
+    }
 }
 
 impl Actor<Message> for Game {
     async fn handle(&mut self, message: Message) {
         match message {
             Message::ClientRequest(request) => self.handle_client_request(request).await,
+            Message::Update => self.handle_update().await,
         }
     }
 

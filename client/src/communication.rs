@@ -262,15 +262,17 @@ impl ConnectionBackend {
         let mut buf = [0; 1024];
         loop {
             let timeout = if let Some((_, sent_time, timeout)) = self.unacknowledged_packet {
-                Some(timeout - sent_time.elapsed())
+                let elapsed = sent_time.elapsed();
+                if timeout < elapsed {
+                    self.handle_timeout().await;
+                    continue;
+                }
+                Some(timeout - elapsed)
             } else {
                 None
             };
 
-            tokio::select! {
-                true = async { if let Some(timeout) = timeout { sleep(timeout).await; true } else {false} } => {
-                    self.handle_timeout().await;
-                }
+            tokio::select! { biased;
                 cmd = self.commands_from_frontend.recv() => {
                     match cmd {
                         Some(cmd) => self.handle_command(cmd) .await,
@@ -293,6 +295,9 @@ impl ConnectionBackend {
                             return;
                         }
                     }
+                }
+                true = async { if let Some(timeout) = timeout { sleep(timeout).await; true } else {false} } => {
+                    self.handle_timeout().await;
                 }
             }
         }

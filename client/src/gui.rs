@@ -177,6 +177,11 @@ impl Default for AppSettings {
     }
 }
 
+enum ReadOnly {
+    ReadOnly,
+    ReadWrite,
+}
+
 struct MyApp {
     walking_directions: DirectionStack,
     textures: Option<Rc<TextureManager>>,
@@ -202,7 +207,7 @@ impl MyApp {
         &mut self,
         ui: &mut egui::Ui,
         settings: &Settings,
-        read_only: bool,
+        read_only: ReadOnly,
     ) -> Option<Settings> {
         let textures = self.textures(ui.ctx());
 
@@ -556,9 +561,38 @@ impl MyApp {
         ui: &mut egui::Ui,
         settings: &Settings,
         players: &Vec<Player>,
+        players_ready: &Vec<Ready>,
         local_player_id: &PlayerId,
     ) {
-        todo!()
+        ui.heading(format!("Guest in Multiplayer Game {}", settings.game_name));
+
+        if let Ready::NotReady = players_ready[local_player_id.idx()] {
+            let button = ui.button("Ready");
+            {
+                let mut memory = ui.memory();
+                if memory.focus().is_none() {
+                    memory.request_focus(button.id);
+                }
+            }
+            if button.clicked() {
+                self.game_controller.set_ready(Ready::Ready);
+            }
+        } else {
+            if ui.button("NotReady").clicked() {
+                self.game_controller.set_ready(Ready::Ready);
+            }
+        }
+        if ui.button("Cancel").clicked() {
+            self.game_controller.disconnect();
+        }
+
+        for (player, ready) in players.iter().zip(players_ready) {
+            ui.horizontal(|ui| {
+                ui.label(format!("{}", player.id.0));
+                ui.label(format!("{}", player.name));
+                ui.label(format!("{:?}", ready));
+            });
+        }
     }
 
     fn update_multiplayer_host(
@@ -569,9 +603,9 @@ impl MyApp {
         players_ready: &Vec<Ready>,
         local_player_id: PlayerId,
     ) {
-        ui.heading(format!("Multiplayer Game {}", settings.game_name));
+        ui.heading(format!("Hosting Multiplayer Game {}", settings.game_name));
 
-        if let Some(new_settings) = self.update_settings(ui, &settings, false) {
+        if let Some(new_settings) = self.update_settings(ui, &settings, ReadOnly::ReadWrite) {
             self.game_controller.update_settings(new_settings);
         }
         if let Ready::NotReady = players_ready[local_player_id.idx()] {
@@ -688,7 +722,13 @@ impl eframe::App for MyApp {
                     players_ready,
                     local_player_id,
                 } => {
-                    self.update_multiplayer_guest(ui, settings, players, local_player_id);
+                    self.update_multiplayer_guest(
+                        ui,
+                        settings,
+                        players,
+                        players_ready,
+                        local_player_id,
+                    );
                 }
                 State::MpLobby {
                     host: true,

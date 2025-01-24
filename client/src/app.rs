@@ -448,16 +448,10 @@ impl GameControllerBackend {
             (communication::Event::Update(_), State::MpConnecting) => todo!(),
             (communication::Event::Update(_), State::MpView(_)) => todo!(),
             (communication::Event::Update(_), State::MpOpeningNewLobby) => todo!(),
-            (
-                communication::Event::Update(_),
-                State::MpLobby {
-                    host,
-                    settings,
-                    players,
-                    players_ready,
-                    local_player_id,
-                },
-            ) => todo!(),
+            (communication::Event::Update(_), state @ State::MpLobby { .. }) => {
+                log::warn!("getting an update in MpLobby. Seems we missed the GameStart. It should come in response to opur next lobbyPoll");
+                state
+            }
             (communication::Event::Update(_), State::MpServerLost(_)) => todo!(),
             (communication::Event::Update(_), State::GuiClosed) => todo!(),
             (communication::Event::Update(_), State::MpJoiningLobby { game_id }) => todo!(),

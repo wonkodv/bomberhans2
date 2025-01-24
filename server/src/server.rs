@@ -16,6 +16,7 @@ use crate::Response;
 #[derive(Debug)]
 pub enum Message {
     Request(Request),
+    Update,
     GameStarted(GameId),
     GameClosed(GameId),
 }
@@ -180,7 +181,12 @@ impl Actor<Message> for Server {
 
                 debug_assert!(!self.client_games.values().any(|&gid| gid == game_id));
             }
-        }
+            Message::Update => {
+                for game in self.games.values() {
+                    game.manager.send(game::Message::Update).await;
+                }
+            }
+        };
     }
 
     async fn close(self) {
