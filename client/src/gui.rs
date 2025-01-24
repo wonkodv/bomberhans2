@@ -588,7 +588,7 @@ impl MyApp {
             }
         } else {
             if ui.button("NotReady").clicked() {
-                self.game_controller.set_ready(Ready::Ready);
+                self.game_controller.set_ready(Ready::NotReady);
             }
         }
         if ui.button("Cancel").clicked() {
