@@ -19,6 +19,7 @@
         devShells.default = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [
             cargo-expand
+            cargo-edit
             cargo
             rustc
             clang
