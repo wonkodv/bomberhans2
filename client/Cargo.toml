@@ -15,10 +15,10 @@ env_logger     = { workspace = true }
 rand           = { workspace = true }
 tokio          = { workspace = true }
 
-confy  = "0.5.1"
+confy  = "0.6.1"
 eframe = "0.20.1"
-egui   = "0.20.1"
-image  = { version = "0.24.9", default-features = false, features = ["bmp"] }
+egui   = "0.30.0"
+image  = { version = "0.25.5", default-features = false, features = ["bmp"] }
 
 [lints]
 workspace = true

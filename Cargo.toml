@@ -23,10 +23,10 @@ readme = "readme.md"
 
 [workspace.dependencies]
 bomberhans-lib = {path = "lib"}
-env_logger = "0.10.2"
+env_logger = "0.11.6"
 log = "0.4.25"
 serde = { version = "1.0.217", features = ["derive"] }
-rand = "0.8.5"
+rand = "0.9.0"
 tokio = { version = "1.43.0", features = ["full"] }
 
 [workspace.lints.rust]
