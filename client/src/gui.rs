@@ -9,8 +9,10 @@ use bomberhans_lib::network::ServerLobbyList;
 use bomberhans_lib::utils::Idx as _;
 use bomberhans_lib::utils::PlayerId;
 use eframe::egui;
+use egui::load::SizedTexture;
 use egui::pos2;
 use egui::Color32;
+use egui::ImageSource;
 use egui::Pos2;
 use egui::Rect;
 use egui::Shape;
@@ -47,47 +49,56 @@ fn player_rect(pos: Position, offset: Pos2) -> egui::Rect {
 }
 
 pub fn gui(mut game_controller: GameController) {
-    let options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(600.0, 600.0)),
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([600.0, 600.0])
+            .with_min_inner_size([300.0, 220.0])
+            .with_icon(
+                // NOTE: Adding an icon is optional
+                eframe::icon_data::from_png_bytes(
+                    &include_bytes!("../../images/icon_client.png")[..],
+                )
+                .expect("Failed to load icon"),
+            ),
         ..Default::default()
     };
     eframe::run_native(
         &format!("Bomberhans {}", bomberhans_lib::VERSION),
-        options,
+        native_options,
         Box::new(|cc| {
             let frame = cc.egui_ctx.clone();
             game_controller.set_update_callback(Box::new(move || {
                 frame.request_repaint();
             }));
 
-            Box::new(MyApp {
+            Ok(Box::new(MyApp {
                 app_settings: AppSettings::load(),
                 textures: None,
                 walking_directions: DirectionStack::new(),
                 game_controller,
-            })
+            }))
         }),
     );
 }
 
 struct TextureManager {
-    textures: HashMap<&'static str, TextureHandle>,
+    textures: HashMap<&'static str, ImageSource<'static>>,
 }
 
 impl TextureManager {
-    fn get_texture(self: &Rc<Self>, texture: &str) -> TextureId {
+    fn get_texture(self: &Rc<Self>, texture: &str) -> ImageSource<'static> {
         self.textures
             .get(texture)
             .ok_or_else(|| format!("Expected {texture} to exist"))
             .unwrap()
-            .into()
+            .clone() // cheap clone
     }
 
-    fn get_cell(self: &Rc<Self>, cell: &Cell) -> TextureId {
+    fn get_cell(self: &Rc<Self>, cell: &Cell) -> ImageSource<'static> {
         self.get_texture(&format!("cell_{}", cell.name()))
     }
 
-    fn get_player(self: &Rc<Self>, player: &PlayerState, time: GameTime) -> TextureId {
+    fn get_player(self: &Rc<Self>, player: &PlayerState, time: GameTime) -> ImageSource<'static> {
         let odd = if time.ticks_from_start() / 15 % 2 == 0 {
             "2"
         } else {
@@ -123,12 +134,7 @@ impl DirectionStack {
     }
 
     pub fn remove(&mut self, dir: Direction) {
-        self.elements.remove(
-            self.elements
-                .iter()
-                .position(|x| x == &dir)
-                .expect("removing key that was added"),
-        );
+        self.elements.retain(|x| x != &dir);
     }
 
     pub fn get(&self) -> Option<Direction> {
@@ -224,19 +230,19 @@ impl MyApp {
                 ui.add(
                     egui::Slider::new(&mut settings_mut.width, Settings::WIDTH_RANGE)
                         .text("Width")
-                        .clamp_to_range(true),
+                        .clamping(egui::SliderClamping::Always)
                 )
                 .on_hover_text("Width of the game field [cells]");
                 ui.add(
                     egui::Slider::new(&mut settings_mut.height, Settings::HEIGHT_RANGE)
                         .text("Height")
-                        .clamp_to_range(true),
+                        .clamping(egui::SliderClamping::Always),
                 )
                 .on_hover_text("Height of the game field [cells]");
                 ui.add(
                     egui::Slider::new(&mut settings_mut.players, Settings::PLAYERS_RANGE)
                         .text("Players")
-                        .clamp_to_range(true),
+                        .clamping(egui::SliderClamping::Always),
                 )
                 .on_hover_text("Number of players that can join this game");
                 ui.add(
@@ -245,13 +251,13 @@ impl MyApp {
                         Settings::BOMB_TIME_RANGE,
                     )
                     .text("Bomb Time")
-                    .clamp_to_range(true),
+                    .clamping(egui::SliderClamping::Always),
                 )
                 .on_hover_text("Time between placing a bomb and its explosion [ms]");
                 ui.add(
                     egui::Slider::new(&mut settings_mut.speed_base, Settings::SPEED_BASE_RANGE)
                         .text("Base Speed")
-                        .clamp_to_range(false),
+                        .clamping(egui::SliderClamping::Never),
                 )
                 .on_hover_text("Speed of the Player without any upgrades [Cells/s/100]");
                 ui.add(
@@ -260,7 +266,7 @@ impl MyApp {
                         Settings::SPEED_MULTIPLYER_RANGE,
                     )
                     .text("Speed Increase")
-                    .clamp_to_range(false),
+                    .clamping(egui::SliderClamping::Never),
                 )
                 .on_hover_text("Player speed increase per speed powerup [Cells/s/100]");
                 ui.add(
@@ -269,7 +275,7 @@ impl MyApp {
                         Settings::BOMB_WALKING_CHANCE_RANGE,
                     )
                     .text("Bomb Walking")
-                    .clamp_to_range(true),
+                    .clamping(egui::SliderClamping::Always),
                 )
                 .on_hover_text("Chance that a player can walk over a bomb in an update [%]");
                 ui.add(
@@ -278,7 +284,7 @@ impl MyApp {
                         Settings::TOMBSTONE_WALKING_CHANCE_RANGE,
                     )
                     .text("Tombstone Walking")
-                    .clamp_to_range(true),
+                    .clamping(egui::SliderClamping::Always),
                 )
                 .on_hover_text("Chance that a player can walk over a tombstone in an update [%]");
                 ui.add(
@@ -287,7 +293,7 @@ impl MyApp {
                         Settings::UPGRADE_EXPLOSION_POWER_RANGE,
                     )
                     .text("Upgrade Explosion")
-                    .clamp_to_range(false),
+                    .clamping(egui::SliderClamping::Never),
                 )
                 .on_hover_text("Explosion Range of ignited Powerups [cells]");
                 ui.add(
@@ -296,7 +302,7 @@ impl MyApp {
                         Settings::WOOD_BURN_TIME_RANGE,
                     )
                     .text("Wood Burn Time")
-                    .clamp_to_range(false),
+                    .clamping(egui::SliderClamping::Never),
                 )
                 .on_hover_text("Time that wood burns after igniting [ms]");
                 ui.add(
@@ -305,13 +311,13 @@ impl MyApp {
                         Settings::FIRE_BURN_TIME_RANGE,
                     )
                     .text("Fire Burn Time")
-                    .clamp_to_range(false),
+                    .clamping(egui::SliderClamping::Never),
                 )
                 .on_hover_text("Time that fire burns [ms]");
                 ui.add(
                     egui::Slider::new(&mut settings_mut.bomb_offset, Settings::BOMB_OFFSET_RANGE)
                         .text("Bomb Placement Offset")
-                        .clamp_to_range(false),
+                        .clamping(egui::SliderClamping::Never),
                 )
                 .on_hover_text("While running, how far behind hans a bomb is placed [cells/100]");
             });
@@ -622,12 +628,7 @@ impl eframe::App for MyApp {
                         //          }
 
                         let start_button = ui.button("Start").on_hover_text("Start local game");
-                        {
-                            let mut memory = ui.memory();
-                            if memory.focus().is_none() {
-                                memory.request_focus(start_button.id);
-                            }
-                        }
+                        default_focus(ctx, &start_button);
 
                         if start_button.clicked() {
                             //              self.app_settings.save();
@@ -730,10 +731,15 @@ impl eframe::App for MyApp {
                 }
             };
         });
-        if !frame.is_web() {
-            egui::gui_zoom::zoom_with_keyboard_shortcuts(ctx, frame.info().native_pixels_per_point);
-        }
     }
+}
+
+fn default_focus(ctx: &egui::Context, start_button: &egui::Response) {
+    ctx.memory_mut(|memory| {
+        if memory.focused().is_none() {
+            memory.request_focus(start_button.id);
+        }
+    });
 }
 
 /// Create an image from byte slice
@@ -756,22 +762,20 @@ fn load_image_from_memory(image_data: &[u8], transparent: bool) -> egui::ColorIm
     egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
 }
 
-fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, TextureHandle> {
+fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, ImageSource<'static>> {
     let mut map = HashMap::new();
 
     macro_rules! load {
         ($x:expr, $t:expr) => {
+            let image =
+                load_image_from_memory(include_bytes!(concat!("../../images/", $x, ".bmp")), $t);
             map.insert(
                 $x,
-                ctx.load_texture(
-                    $x,
-                    load_image_from_memory(
-                        include_bytes!(concat!("../../images/", $x, ".bmp")),
-                        $t,
-                    ),
-                    egui::TextureOptions::default(),
-                ),
-            )
+                ImageSource::Texture(SizedTexture {
+                    id: ctx.load_texture($x, image, egui::TextureOptions::default()),
+                    size: image.size,
+                }),
+            );
         };
     }
 
