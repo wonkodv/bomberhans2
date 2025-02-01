@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.21" # keep in sync with flake.nix
+version = "0.2.22" # keep in sync with flake.nix
 edition = "2021"
 authors = [ "wonko" ]
 description = "A bad looking bomberman clone where dying doesn't stop you"
