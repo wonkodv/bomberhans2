@@ -33,7 +33,7 @@ pub const TICKS_PER_SECOND: u32 = 50;
 pub const TIME_PER_TICK: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// A Time Stamp (not a duration)
-#[derive(Default, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, PartialEq, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct GameTime {
     inner: u32,
 }
@@ -93,7 +93,7 @@ impl fmt::Debug for GameTimeDiff {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct PlayerId(pub u32);
 
 impl fmt::Debug for PlayerId {
@@ -108,7 +108,7 @@ impl Idx for PlayerId {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Direction {
     North,
     West,
@@ -178,7 +178,7 @@ impl fmt::Debug for CellPosition {
 }
 
 /// Player positions
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
     pub y: i32,

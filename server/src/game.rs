@@ -338,20 +338,30 @@ impl Game {
                 for u in updates {
                     if u.time > game.game_state.time {
                         game.future_updates.push(u);
-                    } else if game.game_state.set_player_action(u.player, u.action) {
-                        game.updates.push(Update {
-                            time: game.game_state.time,
-                            ..u
-                        });
+                    } else {
+                        assert_eq!(u.time, game.game_state.time);
+                        if game.game_state.set_player_action(u.player, u.action) {
+                            log::trace!("GAME PLAYER ACTION: {u:?}");
+                            game.updates.push(Update {
+                                time: game.game_state.time,
+                                ..u
+                            });
+                        } else {
+                            log::trace!("GAME PLAYER ACTION REDUNDANT, not forwarded: {u:?}");
+                        }
                     }
                 }
 
                 game.game_state.simulate_1_update();
 
+                let checksum = game.game_state.checksum();
+
+                log::trace!("GAME UPDATE: {:X} {:?}", checksum, game.game_state);
+
                 for client in self.clients.values() {
                     let message = ServerMessage::Update(ServerUpdate {
                         time: game.game_state.time,
-                        checksum: 0, // TODO: Checksum
+                        checksum,
                         updates: game
                             .updates
                             .iter()

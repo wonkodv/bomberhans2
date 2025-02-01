@@ -8,7 +8,7 @@ use crate::field::Upgrade;
 use crate::utils::GameTimeDiff;
 
 /// Ratios of Wood turning into those cell types:
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Ratios {
     pub power: u32,
     pub speed: u32,
@@ -118,7 +118,7 @@ impl Ratios {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Settings {
     /// Name of the game
     pub game_name: String,

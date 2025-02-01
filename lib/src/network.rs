@@ -90,7 +90,7 @@ pub struct ServerUpdate {
     pub time: GameTime,
 
     /// Hash of the Game State
-    pub checksum: u32,
+    pub checksum: u64,
 
     /// Everything that has happened since the client last acknowledged
     pub updates: Vec<Update>,
@@ -187,7 +187,12 @@ where
     S: std::fmt::Debug,
 {
     let result = postcard::to_allocvec(value).expect("can serialize anything");
-    debug_assert!(result.len() < MTU, "Message too large {value:#?}");
+    debug_assert!(
+        result.len() < MTU,
+        "Message too large ({}) {:#?}",
+        result.len(),
+        value
+    );
     result
 }
 

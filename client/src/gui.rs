@@ -469,11 +469,11 @@ impl MyApp {
             let server = self.app_settings.server.parse::<SocketAddr>();
             match server {
                 Err(err) => {
-                    server_text_edit.on_hover_text(format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Problem: {err:#?}"));
+                    server_text_edit.on_hover_text(format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Problem: {err:?}"));
                     // TODO: make the textedit red
                 }
                 Ok(server) => {
-                server_text_edit.on_hover_text(format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Value: {server:#?}"));
+                server_text_edit.on_hover_text(format!("Server (name/ip) and optionally port\nFor Example:\n-   [::1]:4267\n-   bomberhans.hanstool.org\nCurrent Value: {server:?}"));
                 if connect_button.clicked() {
                     self.app_settings.save(); // TODO: should only save server
 

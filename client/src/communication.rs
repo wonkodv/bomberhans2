@@ -231,7 +231,7 @@ impl ConnectionBackend {
     }
 
     async fn send_message(&mut self, message: ClientMessage) {
-        log::debug!("Sending {message:#?}");
+        log::debug!("Sending {message:?}");
         let now = Instant::now();
 
         let message_timeout = message_timeout(&message);

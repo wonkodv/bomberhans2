@@ -32,6 +32,7 @@ fn synchronize_simulation(
     for server_time in server_game_state.time.ticks_from_start()..update.time.ticks_from_start() {
         for u in &update.updates {
             if u.time == server_game_state.time {
+                log::trace!("GAME PLAYER ACTION: {u:?}");
                 server_game_state.set_player_action(u.player, u.action);
             }
         }
@@ -39,7 +40,13 @@ fn synchronize_simulation(
     }
     debug_assert_eq!(update.time, server_game_state.time);
 
-    // TODO: if server_game_state.checksum() != update.checksum { panic!(); }
+    if server_game_state.checksum() != update.checksum {
+        panic!(
+            "Desync! {checksum:X} != {update_checksum:X} ! {server_game_state:?}",
+            checksum = server_game_state.checksum(),
+            update_checksum = update.checksum
+        );
+    }
 
     let mut local_game_state = server_game_state.clone();
 
@@ -140,7 +147,7 @@ impl GameController {
     pub fn set_update_callback(&mut self, callback: Box<dyn Fn() + Send>) {
         self.tx
             .blocking_send(Command::SetUpdateCallback(UpdateCallback(callback)))
-            .map_err(|e| format!("{e:#?}"))
+            .map_err(|e| format!("{e:?}"))
             .unwrap();
     }
     pub fn set_action(&mut self, action: Action) {

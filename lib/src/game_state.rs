@@ -1,6 +1,3 @@
-use serde::Deserialize;
-use serde::Serialize;
-
 use crate::field::Cell;
 use crate::field::Field;
 use crate::field::Upgrade;
@@ -14,10 +11,13 @@ use crate::utils::Idx;
 use crate::utils::PlayerId;
 use crate::utils::Position;
 use crate::utils::TICKS_PER_SECOND;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 pub struct Player {
     /// Name the player chose
     pub name: String,
@@ -39,7 +39,7 @@ impl Player {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct PlayerState {
     /// current position
     pub position: Position,
@@ -107,7 +107,7 @@ impl PlayerState {
     }
 }
 
-#[derive(PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub struct Action {
     pub walking: Option<Direction>,
     pub placing: bool,
@@ -136,12 +136,20 @@ impl fmt::Debug for Action {
 }
 
 /// The variable state of the game at a given time
-#[derive(Debug, Clone)]
+#[derive(Debug, Hash, Clone)]
 pub struct GameState {
     pub time: GameTime,
     pub field: Field,
     pub players: BTreeMap<PlayerId, (Player, PlayerState)>, // TODO: turn this into Vec
     pub settings: Settings,
+}
+
+impl GameState {
+    pub fn checksum(&self) -> u64 {
+        let mut s = DefaultHasher::new();
+        self.hash(&mut s);
+        s.finish()
+    }
 }
 
 /// APIs

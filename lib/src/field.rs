@@ -7,7 +7,7 @@ use crate::utils::CellPosition;
 use crate::utils::GameTime;
 use crate::utils::PlayerId;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Hash)]
 pub enum Upgrade {
     Speed,
     Power,
@@ -24,7 +24,7 @@ impl fmt::Debug for Upgrade {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Hash)]
 pub enum Cell {
     #[default]
     Empty,
@@ -129,7 +129,7 @@ impl Cell {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct Field {
     pub width: u32,
     pub height: u32,
