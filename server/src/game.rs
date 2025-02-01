@@ -4,11 +4,14 @@ use std::net::SocketAddr;
 use std::time::Instant;
 
 use bomberhans2_lib::field::Field;
-use bomberhans2_lib::game_state::*;
-use bomberhans2_lib::network::*;
+use bomberhans2_lib::game_state::{GameState, Player};
+use bomberhans2_lib::network::{
+    ClientJoinLobby, ClientLobbyReady, ClientMessage, ClientOpenLobby, GameId, Ready,
+    ServerGameStart, ServerLobbyUpdate, ServerMessage, ServerUpdate, Update,
+};
 use bomberhans2_lib::settings::Settings;
 use bomberhans2_lib::utils::PlayerId;
-use bomberhans2_lib::utils::*;
+use bomberhans2_lib::utils::{GameTime, Idx, Position};
 
 use crate::actor::Actor;
 use crate::actor::AssistantManager;

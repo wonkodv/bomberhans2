@@ -522,12 +522,12 @@ impl MyApp {
     ) {
         if host {
             ui.heading(format!("Hosting Multiplayer Game {}", settings.game_name));
-            if let Some(new_settings) = self.update_settings(ui, &settings, ReadOnly::ReadWrite) {
+            if let Some(new_settings) = self.update_settings(ui, settings, ReadOnly::ReadWrite) {
                 self.game_controller.update_settings(new_settings);
             }
         } else {
             ui.heading(format!("Guest in Multiplayer Game {}", settings.game_name));
-            ui.label(format!("{:?}", settings));
+            ui.label(format!("{settings:?}"));
         }
 
         if let Ready::NotReady = players_ready[local_player_id.idx()] {
@@ -548,8 +548,8 @@ impl MyApp {
         for (player, ready) in players.iter().zip(players_ready) {
             ui.horizontal(|ui| {
                 ui.label(format!("{}", player.id.0));
-                ui.label(format!("{}", player.name));
-                ui.label(format!("{:?}", ready));
+                ui.label(player.name.to_string());
+                ui.label(format!("{ready:?}"));
             });
         }
     }
@@ -598,7 +598,7 @@ impl eframe::App for MyApp {
                         self.game_controller.disconnect();
                     }
                 }
-                State::MpView(server_info) => self.update_multiplayer_view(ui, &server_info),
+                State::MpView(server_info) => self.update_multiplayer_view(ui, server_info),
                 State::MpOpeningNewLobby => {
                     ui.label("Waiting for new Lobby to open".to_owned());
                     if ui.button("Cancel ").clicked() {
@@ -617,7 +617,7 @@ impl eframe::App for MyApp {
                             local_game_state.settings.game_name
                         ));
                     });
-                    self.update_game(ui, &local_game_state);
+                    self.update_game(ui, local_game_state);
                 }
                 State::MpServerLost(game) => {
                     ui.label("Server not responding".to_owned());

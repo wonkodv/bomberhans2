@@ -110,7 +110,7 @@ struct UpdateCallback(Box<dyn Fn() + Send>);
 
 impl std::fmt::Debug for UpdateCallback {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Callback {}", self as *const _ as usize)
+        write!(f, "Callback {}", std::ptr::from_ref(self) as usize)
     }
 }
 
@@ -242,7 +242,7 @@ impl GameControllerBackend {
                 | State::GuiClosed
                 | State::Invalid
                 | State::MpJoiningLobby { .. }
-                | State::SpSettings => 3600_000,
+                | State::SpSettings => 3_600_000,
                 State::SpGame(_) | State::MpGame { .. } => 16,
                 State::MpLobby { .. } | State::MpView(_) | State::MpServerLost(_) => 1000,
             };
@@ -266,7 +266,7 @@ impl GameControllerBackend {
                 } => {
                     self.handle_server_event(server_event).await;
                 }
-                _ = tokio::time::sleep(Duration::from_millis(interval)) => { self.handle_timeout().await }
+                () = tokio::time::sleep(Duration::from_millis(interval)) => { self.handle_timeout().await }
             }
         }
     }

@@ -13,7 +13,10 @@
 )]
 use actor::launch;
 use actor::Actor;
-use bomberhans2_lib::network::*;
+use bomberhans2_lib::network::{
+    decode, encode, ClientPacket, PacketNumber, ServerMessage, ServerPacket,
+    BOMBERHANS_MAGIC_NO_V1, MTU,
+};
 use std::future::Future;
 use std::io::Write;
 use std::net::Ipv6Addr;
@@ -116,13 +119,13 @@ async fn main() {
 
     let server_manager = launch(|server_manager_assistant| {
         server::Server::new(
-            "HansServer".to_string(),
+            "HansServer".to_owned(),
             responder_manager,
             server_manager_assistant,
         )
     });
 
-    let mut buf = [0u8; MTU];
+    let mut buf = [0_u8; MTU];
     let mut interval = tokio::time::interval(Duration::from_millis(16));
     loop {
         tokio::select! {
@@ -136,7 +139,7 @@ async fn main() {
                 if let Some(packet) = decode::<ClientPacket>(&buf[0..len]) {
                     if packet.magic == BOMBERHANS_MAGIC_NO_V1 {
                         log::trace!("handeling packet from {client_address}  {packet:?}");
-                        server_manager.send(server::Message::Request(Request{packet, client_address})).await;
+                        server_manager.send(server::Message::Request(Request { client_address, packet })).await;
                     } else {
                         log::warn!("ignoring unknown protocol {client_address}  {packet:?}");
                     }

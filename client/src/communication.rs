@@ -8,7 +8,11 @@ use std::net::SocketAddr;
 use bomberhans2_lib::game_state::Action;
 use bomberhans2_lib::game_state::Player;
 use bomberhans2_lib::network::PacketNumber;
-use bomberhans2_lib::network::*;
+use bomberhans2_lib::network::{
+    decode, encode, ClientJoinLobby, ClientLobbyReady, ClientLobbyUpdate, ClientMessage,
+    ClientOpenLobby, ClientPacket, ClientUpdate, GameId, Ready, ServerGameStart, ServerLobbyList,
+    ServerLobbyUpdate, ServerMessage, ServerPacket, ServerUpdate, BOMBERHANS_MAGIC_NO_V1,
+};
 use bomberhans2_lib::settings::Settings;
 use bomberhans2_lib::utils::GameTime;
 use bomberhans2_lib::utils::PlayerId;

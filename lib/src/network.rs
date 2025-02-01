@@ -25,13 +25,19 @@ impl GameId {
 
 #[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PacketNumber(NonZeroU32);
+impl Default for PacketNumber {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PacketNumber {
     pub fn new() -> Self {
         Self(NonZeroU32::new(1).unwrap())
     }
     pub fn next(&mut self) -> Self {
         self.0 = self.0.checked_add(1).expect("packet_number fits 32bit");
-        return Self(self.0);
+        Self(self.0)
     }
 }
 

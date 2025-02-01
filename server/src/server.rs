@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use bomberhans2_lib::network::*;
+use bomberhans2_lib::network::{
+    ClientJoinLobby, ClientMessage, GameId, ServerLobbyList, ServerMessage,
+};
 use tokio::task::JoinHandle;
 
 use crate::actor::launch;
@@ -92,7 +94,7 @@ impl Server {
                 return;
             }
             ClientMessage::Bye => {
-                let Some(game_id) = self.client_games.remove(&client_address) else {
+                let Some(game_id) = self.client_games.remove(client_address) else {
                     log::trace!("Bye from client not in any game {client_address:?}");
                     return;
                 };
