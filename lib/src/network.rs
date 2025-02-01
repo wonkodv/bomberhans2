@@ -13,7 +13,7 @@ pub const BOMBERHANS_MAGIC_NO_V1: u32 = 0x1f4a3__001; // 💣
 
 /// The Maximum number of Bytes we send in 1 packet
 /// TODO: good value:?
-pub const MTU: usize = 1024;
+pub const MTU: usize = 4096;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GameId(u32);
@@ -181,7 +181,7 @@ where
     S: std::fmt::Debug,
 {
     let result = postcard::to_allocvec(value).expect("can serialize anything");
-    debug_assert!(result.len() < MTU, "Message too large {value:?}");
+    debug_assert!(result.len() < MTU, "Message too large {value:#?}");
     result
 }
 

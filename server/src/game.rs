@@ -3,12 +3,12 @@ use std::mem;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use bomberhans_lib::field::Field;
-use bomberhans_lib::game_state::*;
-use bomberhans_lib::network::*;
-use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::PlayerId;
-use bomberhans_lib::utils::*;
+use bomberhans2_lib::field::Field;
+use bomberhans2_lib::game_state::*;
+use bomberhans2_lib::network::*;
+use bomberhans2_lib::settings::Settings;
+use bomberhans2_lib::utils::PlayerId;
+use bomberhans2_lib::utils::*;
 
 use crate::actor::Actor;
 use crate::actor::AssistantManager;

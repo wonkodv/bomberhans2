@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use bomberhans_lib::network::*;
+use bomberhans2_lib::network::*;
 use tokio::task::JoinHandle;
 
 use crate::actor::launch;

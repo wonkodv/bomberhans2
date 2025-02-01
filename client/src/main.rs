@@ -42,7 +42,7 @@ fn main() {
         .init();
     log::info!(
         "Running Bomberhans Client {}, LogLevel {}",
-        bomberhans_lib::VERSION,
+        bomberhans2_lib::VERSION,
         log::max_level()
     );
 

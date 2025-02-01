@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use bomberhans_lib::network::GameId;
+use bomberhans2_lib::network::GameId;
 
 enum State {
     Initial,

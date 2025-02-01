@@ -1,5 +1,5 @@
 [package]
-name = "bomberhans-lib"
+name = "bomberhans2-lib"
 version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }

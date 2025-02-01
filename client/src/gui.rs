@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::rc::Rc;
 
-use bomberhans_lib::game_state::GameState;
-use bomberhans_lib::game_state::Player;
-use bomberhans_lib::network::Ready;
-use bomberhans_lib::network::ServerLobbyList;
-use bomberhans_lib::utils::Idx as _;
-use bomberhans_lib::utils::PlayerId;
+use bomberhans2_lib::game_state::GameState;
+use bomberhans2_lib::game_state::Player;
+use bomberhans2_lib::network::Ready;
+use bomberhans2_lib::network::ServerLobbyList;
+use bomberhans2_lib::utils::Idx as _;
+use bomberhans2_lib::utils::PlayerId;
 use eframe::egui;
 use egui::load::SizedTexture;
 use egui::pos2;
@@ -22,14 +22,14 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::app::{GameController, State};
-use bomberhans_lib::field::Cell;
-use bomberhans_lib::game_state::Action;
-use bomberhans_lib::game_state::PlayerState;
-use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::CellPosition;
-use bomberhans_lib::utils::Direction;
-use bomberhans_lib::utils::GameTime;
-use bomberhans_lib::utils::Position;
+use bomberhans2_lib::field::Cell;
+use bomberhans2_lib::game_state::Action;
+use bomberhans2_lib::game_state::PlayerState;
+use bomberhans2_lib::settings::Settings;
+use bomberhans2_lib::utils::CellPosition;
+use bomberhans2_lib::utils::Direction;
+use bomberhans2_lib::utils::GameTime;
+use bomberhans2_lib::utils::Position;
 
 const PIXEL_PER_CELL: f32 = 42.0;
 
@@ -63,7 +63,7 @@ pub fn gui(mut game_controller: GameController) {
         ..Default::default()
     };
     eframe::run_native(
-        &format!("Bomberhans {}", bomberhans_lib::VERSION),
+        &format!("Bomberhans {}", bomberhans2_lib::VERSION),
         native_options,
         Box::new(|cc| {
             let frame = cc.egui_ctx.clone();
@@ -78,43 +78,8 @@ pub fn gui(mut game_controller: GameController) {
                 game_controller,
             }))
         }),
-    );
-}
-
-struct TextureManager {
-    textures: HashMap<&'static str, ImageSource<'static>>,
-}
-
-impl TextureManager {
-    fn get_texture(self: &Rc<Self>, texture: &str) -> ImageSource<'static> {
-        self.textures
-            .get(texture)
-            .ok_or_else(|| format!("Expected {texture} to exist"))
-            .unwrap()
-            .clone() // cheap clone
-    }
-
-    fn get_cell(self: &Rc<Self>, cell: &Cell) -> ImageSource<'static> {
-        self.get_texture(&format!("cell_{}", cell.name()))
-    }
-
-    fn get_player(self: &Rc<Self>, player: &PlayerState, time: GameTime) -> ImageSource<'static> {
-        let odd = if time.ticks_from_start() / 15 % 2 == 0 {
-            "2"
-        } else {
-            ""
-        };
-
-        let s = match player.action.walking {
-            Some(Direction::North) => "walking_n",
-            Some(Direction::West) => "walking_w",
-            Some(Direction::South) => "walking_s",
-            Some(Direction::East) => "walking_e",
-            None if player.action.placing => "placing",
-            _ => "standing",
-        };
-        self.get_texture(&format!("hans_{s}{odd}"))
-    }
+    )
+    .unwrap();
 }
 
 struct DirectionStack {
@@ -197,11 +162,10 @@ struct MyApp {
 
 impl MyApp {
     fn textures(&mut self, ctx: &egui::Context) -> Rc<TextureManager> {
-        Rc::clone(self.textures.get_or_insert_with(|| {
-            Rc::new(TextureManager {
-                textures: load_tiles(ctx),
-            })
-        }))
+        Rc::clone(
+            self.textures
+                .get_or_insert_with(|| Rc::new(TextureManager::new(ctx))),
+        )
     }
 
     /// Settings UI
@@ -364,43 +328,42 @@ impl MyApp {
             });
             ui.vertical(|ui| {
                 ui.heading("effective Ratios");
-                let image_dims = egui::Vec2 { x: 16.0, y: 16.0 };
                 let percentages = settings_mut.ratios.normalize();
                 ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_upgrade_power"), image_dims);
+                    ui.image(textures.get_texture("cell_upgrade_power").image_source.clone() );
                     ui.label(format!("{}%", percentages.power));
                 })
                 .response
                 .on_hover_text("Consuming this will upgrade the player's bomb's explosion range");
                 ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_upgrade_speed"), image_dims);
+                    ui.image(textures.get_texture("cell_upgrade_speed").image_source.clone() );
                     ui.label(format!("{}%", percentages.speed));
                 })
                 .response
                 .on_hover_text("Consuming this will upgrade the player's walking speed");
                 ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_upgrade_bomb"), image_dims);
+                    ui.image(textures.get_texture("cell_upgrade_bomb").image_source.clone() );
                     ui.label(format!("{}%", percentages.bombs));
                 })
                 .response
                 .on_hover_text(
                     "Consuming this will increase how many bombs the player can place simultaneously",
                 );
-                ui.horizontal(|ui| { ui.image(textures.get_texture("cell_teleport"), image_dims); ui.label(format!("{}%", percentages.teleport)); }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
+                ui.horizontal(|ui| { ui.image(textures.get_texture("cell_teleport").image_source.clone() ); ui.label(format!("{}%", percentages.teleport)); }). response.on_hover_text("Teleport\nWalking into a teleport will move you to another TB and consume both.\nIgniting a Teleport will ignite another TP as well");
                 ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_wall"), image_dims);
+                    ui.image(textures.get_texture("cell_wall").image_source.clone() );
                     ui.label(format!("{}%", percentages.wall));
                 })
                 .response
                 .on_hover_text("Wall\nIf this happens too often, you will be stuck.");
                 ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_wood"), image_dims);
+                    ui.image(textures.get_texture("cell_wood").image_source.clone() );
                     ui.label(format!("{}%", percentages.wood));
                 })
                 .response
                 .on_hover_text("Wood\nYou can try and explode again");
                 ui.horizontal(|ui| {
-                    ui.image(textures.get_texture("cell_empty"), image_dims);
+                    ui.image(textures.get_texture("cell_empty").image_source.clone() );
                     ui.label(format!("{}%", percentages.clear));
                 })
                 .response
@@ -420,23 +383,26 @@ impl MyApp {
     }
 
     fn update_game_inputs(&mut self, ui: &mut egui::Ui) {
-        for (key, direction) in [
-            (egui::Key::W, Direction::North),
-            (egui::Key::S, Direction::South),
-            (egui::Key::A, Direction::West),
-            (egui::Key::D, Direction::East),
-        ] {
-            if ui.ctx().input_mut().key_pressed(key) {
-                self.walking_directions.push(direction);
+        let action = ui.ctx().input_mut(|input| {
+            for (key, direction) in [
+                (egui::Key::W, Direction::North),
+                (egui::Key::S, Direction::South),
+                (egui::Key::A, Direction::West),
+                (egui::Key::D, Direction::East),
+            ] {
+                if input.key_pressed(key) {
+                    self.walking_directions.push(direction);
+                }
+                if input.key_released(key) {
+                    self.walking_directions.remove(direction);
+                }
             }
-            if ui.ctx().input_mut().key_released(key) {
-                self.walking_directions.remove(direction);
-            }
-        }
 
-        let placing = ui.ctx().input_mut().key_down(egui::Key::Space);
-        let walking = self.walking_directions.get();
-        self.game_controller.set_action(Action { walking, placing });
+            let placing = input.key_down(egui::Key::Space);
+            let walking = self.walking_directions.get();
+            Action { walking, placing }
+        });
+        self.game_controller.set_action(action);
     }
 
     fn update_game_draw(&mut self, ui: &mut egui::Ui, game_state: &GameState) {
@@ -445,19 +411,12 @@ impl MyApp {
         let width = (game_state.settings.width + 2) as f32 * PIXEL_PER_CELL;
         let height = (game_state.settings.height + 2) as f32 * PIXEL_PER_CELL;
 
-        let game_field = ui.image(
-            textures.get_texture("background"),
-            egui::Vec2 {
-                x: width,
-                y: height,
-            },
-        );
-
-        let painter = ui.painter_at(game_field.rect);
+        let (response, painter) =
+            ui.allocate_painter(egui::Vec2::new(width, height), egui::Sense::hover());
 
         painter.rect_stroke(
-            game_field.rect,
-            egui::Rounding::none(),
+            response.rect,
+            egui::Rounding::ZERO,
             egui::Stroke {
                 width: 2.0,
                 color: egui::Color32::GOLD,
@@ -466,8 +425,8 @@ impl MyApp {
 
         painter.extend(game_state.field.iter_with_border().map(|(pos, cell)| {
             Shape::image(
-                textures.get_cell(cell),
-                cell_rect(pos, game_field.rect.min),
+                textures.get_cell(cell).id,
+                cell_rect(pos, response.rect.min),
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                 Color32::WHITE,
             )
@@ -477,8 +436,8 @@ impl MyApp {
 
         painter.extend(game_state.players.values().map(|(player, state)| {
             Shape::image(
-                textures.get_player(state, time),
-                player_rect(state.position, game_field.rect.min),
+                textures.get_player(state, time).id,
+                player_rect(state.position, response.rect.min),
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                 Color32::WHITE,
             )
@@ -504,12 +463,7 @@ impl MyApp {
             let server_text_edit = ui.add(egui::TextEdit::singleline(&mut self.app_settings.server));
 
             let connect_button = ui.button("Connect").on_hover_text("Connect to Server");
-            {
-                let mut memory = ui.memory();
-                if memory.focus().is_none() {
-                    memory.request_focus(connect_button.id);
-                }
-            }
+            default_focus(ui, &connect_button);
 
 
             let server = self.app_settings.server.parse::<SocketAddr>();
@@ -537,12 +491,7 @@ impl MyApp {
     fn update_multiplayer_view(&mut self, ui: &mut egui::Ui, server_info: &ServerLobbyList) {
         ui.heading(format!("Multiplayer Games on {}", server_info.server_name,));
         let button = ui.button("Host new Game");
-        {
-            let mut memory = ui.memory();
-            if memory.focus().is_none() {
-                memory.request_focus(button.id);
-            }
-        }
+        default_focus(ui, &button);
         if button.clicked() {
             self.game_controller
                 .open_new_lobby(self.app_settings.player_name.clone());
@@ -583,12 +532,7 @@ impl MyApp {
 
         if let Ready::NotReady = players_ready[local_player_id.idx()] {
             let button = ui.button("Ready");
-            {
-                let mut memory = ui.memory();
-                if memory.focus().is_none() {
-                    memory.request_focus(button.id);
-                }
-            }
+            default_focus(ui, &button);
             if button.clicked() {
                 self.game_controller.set_ready(Ready::Ready);
             }
@@ -628,7 +572,7 @@ impl eframe::App for MyApp {
                         //          }
 
                         let start_button = ui.button("Start").on_hover_text("Start local game");
-                        default_focus(ctx, &start_button);
+                        default_focus(ui, &start_button);
 
                         if start_button.clicked() {
                             //              self.app_settings.save();
@@ -734,8 +678,8 @@ impl eframe::App for MyApp {
     }
 }
 
-fn default_focus(ctx: &egui::Context, start_button: &egui::Response) {
-    ctx.memory_mut(|memory| {
+fn default_focus(ui: &egui::Ui, start_button: &egui::Response) {
+    ui.ctx().memory_mut(|memory| {
         if memory.focused().is_none() {
             memory.request_focus(start_button.id);
         }
@@ -762,56 +706,96 @@ fn load_image_from_memory(image_data: &[u8], transparent: bool) -> egui::ColorIm
     egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice())
 }
 
-fn load_tiles(ctx: &egui::Context) -> HashMap<&'static str, ImageSource<'static>> {
-    let mut map = HashMap::new();
+struct Texture {
+    id: TextureId,
+    texture_handle: TextureHandle,
+    image_source: ImageSource<'static>,
+}
 
-    macro_rules! load {
-        ($x:expr, $t:expr) => {
-            let image =
-                load_image_from_memory(include_bytes!(concat!("../../images/", $x, ".bmp")), $t);
-            map.insert(
-                $x,
-                ImageSource::Texture(SizedTexture {
-                    id: ctx.load_texture($x, image, egui::TextureOptions::default()),
-                    size: image.size,
-                }),
-            );
-        };
+struct TextureManager {
+    textures: HashMap<&'static str, Texture>,
+}
+
+impl TextureManager {
+    fn get_texture(self: &Rc<Self>, texture: &str) -> &Texture {
+        &self.textures[texture]
     }
 
-    load!("cell_bomb", false);
-    load!("cell_empty", false);
-    load!("cell_fire", false);
-    load!("cell_start_point", false);
-    load!("cell_teleport", false);
-    load!("cell_tomb_stone", false);
-    load!("cell_upgrade_speed", false);
-    load!("cell_upgrade_bomb", false);
-    load!("cell_upgrade_power", false);
-    load!("cell_wall", false);
-    load!("cell_wood", false);
-    load!("cell_wood_burning", false);
+    fn get_cell(self: &Rc<Self>, cell: &Cell) -> &Texture {
+        self.get_texture(&format!("cell_{}", cell.name()))
+    }
 
-    load!("hans_placing", true);
-    load!("hans_placing2", true);
-    load!("hans_standing", true);
-    load!("hans_standing2", true);
-    load!("hans_walking_e2", true);
-    load!("hans_walking_e", true);
-    load!("hans_walking_n2", true);
-    load!("hans_walking_n", true);
-    load!("hans_walking_s2", true);
-    load!("hans_walking_s", true);
-    load!("hans_walking_w2", true);
-    load!("hans_walking_w", true);
+    fn get_player(self: &Rc<Self>, player: &PlayerState, time: GameTime) -> &Texture {
+        let odd = if time.ticks_from_start() / 15 % 2 == 0 {
+            "2"
+        } else {
+            ""
+        };
 
-    map.insert(
-        "background",
-        ctx.load_texture(
-            "background",
-            egui::ColorImage::new([1, 1], egui::Color32::GRAY),
-            egui::TextureOptions::default(),
-        ),
-    );
-    map
+        let s = match player.action.walking {
+            Some(Direction::North) => "walking_n",
+            Some(Direction::West) => "walking_w",
+            Some(Direction::South) => "walking_s",
+            Some(Direction::East) => "walking_e",
+            None if player.action.placing => "placing",
+            _ => "standing",
+        };
+        self.get_texture(&format!("hans_{s}{odd}"))
+    }
+
+    fn new(ctx: &egui::Context) -> Self {
+        // egui_extras::install_image_loaders(ctx);
+
+        let mut map = HashMap::new();
+
+        let mut load_bytes = |id: &'static str, bytes: &[u8], transparent: bool| {
+            let image = load_image_from_memory(bytes, transparent);
+            let size = egui::Vec2::new(image.size[0] as f32, image.size[1] as f32);
+            let texture_handle = ctx.load_texture(id, image, egui::TextureOptions::default());
+            let image_source = ImageSource::Texture(SizedTexture {
+                size,
+                id: texture_handle.id(),
+            });
+            let texture = Texture {
+                id: texture_handle.id(),
+                texture_handle,
+                image_source,
+            };
+            map.insert(id, texture);
+        };
+
+        macro_rules! load {
+            ($x:expr, $t:expr) => {
+                load_bytes($x, include_bytes!(concat!("../../images/", $x, ".png")), $t);
+            };
+        }
+
+        load!("cell_bomb", false);
+        load!("cell_empty", false);
+        load!("cell_fire", false);
+        load!("cell_start_point", false);
+        load!("cell_teleport", false);
+        load!("cell_tomb_stone", false);
+        load!("cell_upgrade_speed", false);
+        load!("cell_upgrade_bomb", false);
+        load!("cell_upgrade_power", false);
+        load!("cell_wall", false);
+        load!("cell_wood", false);
+        load!("cell_wood_burning", false);
+
+        load!("hans_placing", true);
+        load!("hans_placing2", true);
+        load!("hans_standing", true);
+        load!("hans_standing2", true);
+        load!("hans_walking_e2", true);
+        load!("hans_walking_e", true);
+        load!("hans_walking_n2", true);
+        load!("hans_walking_n", true);
+        load!("hans_walking_s2", true);
+        load!("hans_walking_s", true);
+        load!("hans_walking_w2", true);
+        load!("hans_walking_w", true);
+
+        Self { textures: map }
+    }
 }

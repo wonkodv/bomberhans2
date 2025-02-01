@@ -1,7 +1,7 @@
-use bomberhans_lib::field::Field;
-use bomberhans_lib::game_state::{Action, GameState, Player};
-use bomberhans_lib::settings::Settings;
-use bomberhans_lib::utils::{GameTime, Idx as _, PlayerId, Position, TIME_PER_TICK};
+use bomberhans2_lib::field::Field;
+use bomberhans2_lib::game_state::{Action, GameState, Player};
+use bomberhans2_lib::settings::Settings;
+use bomberhans2_lib::utils::{GameTime, Idx as _, PlayerId, Position, TIME_PER_TICK};
 use std::collections::VecDeque;
 use std::time;
 

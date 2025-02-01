@@ -13,7 +13,7 @@
 )]
 use actor::launch;
 use actor::Actor;
-use bomberhans_lib::network::*;
+use bomberhans2_lib::network::*;
 use std::future::Future;
 use std::io::Write;
 use std::net::Ipv6Addr;
@@ -101,7 +101,7 @@ async fn main() {
         .init();
     log::info!(
         "Running Bomberhans Server {}, LogLevel {}",
-        bomberhans_lib::VERSION,
+        bomberhans2_lib::VERSION,
         log::max_level(),
     );
 
