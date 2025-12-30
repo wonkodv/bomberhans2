@@ -39,7 +39,7 @@ impl Player {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq, Serialize, Deserialize)]
 pub struct PlayerState {
     /// current position
     pub position: Position,
@@ -136,7 +136,7 @@ impl fmt::Debug for Action {
 }
 
 /// The variable state of the game at a given time
-#[derive(Debug, Hash, Clone)]
+#[derive(Debug, Hash, Clone, Serialize, Deserialize)]
 pub struct GameState {
     pub time: GameTime,
     pub field: Field,

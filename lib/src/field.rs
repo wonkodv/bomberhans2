@@ -2,12 +2,14 @@ use core::fmt;
 use std::ops::Index;
 use std::ops::IndexMut;
 
+use serde::{Deserialize, Serialize};
+
 use crate::settings::Settings;
 use crate::utils::CellPosition;
 use crate::utils::GameTime;
 use crate::utils::PlayerId;
 
-#[derive(Copy, Clone, PartialEq, Hash)]
+#[derive(Copy, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Upgrade {
     Speed,
     Power,
@@ -24,7 +26,7 @@ impl fmt::Debug for Upgrade {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Cell {
     #[default]
     Empty,
@@ -129,7 +131,7 @@ impl Cell {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Field {
     pub width: u32,
     pub height: u32,
