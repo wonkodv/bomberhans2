@@ -28,7 +28,7 @@ jobs:
         id: version
         run: |
           git fetch --depth=100 --tags --force
-          echo "VERSION=$(git describe --tags --match 'v*')" | tee -a "$GITHUB_OUTPUT"
+          echo "VERSION=$(git describe --tags --match 'v*' --always)" | tee -a "$GITHUB_OUTPUT"
 
       - name: Install Toolchain
         run:  rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
