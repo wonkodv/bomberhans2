@@ -296,6 +296,14 @@ impl Game {
                     return;
                 };
 
+                if msg.current_action_start_time < game.game_state.time {
+                    log::warn!(
+                        "{game_id:?}: Discarding old Client Game update at server time {:?}, {msg:?}",
+                        game.game_state.time
+                    );
+                    return;
+                }
+
                 game.future_updates.push(Update {
                     player: client.player_id,
                     action: msg.current_player_action,
